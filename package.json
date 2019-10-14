@@ -1,5 +1,5 @@
 {
-  "name": "whatsapp-bot-library",
+  "name": "js-whatsapp",
   "version": "0.0.0",
   "description": "A WhatsApp bot library",
   "author": "Noam Alffasy <noahm1234@outlook.com>",
@@ -24,5 +24,9 @@
     "qrcode": "^1.4.1",
     "sharp": "^0.23.1",
     "ws": "^7.1.2"
+  },
+  "repository": "git://github.com/noamalffasy/js-whatsapp.git",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
   }
 }
