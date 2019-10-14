@@ -325,7 +325,7 @@ interface WASendMedia extends WAMedia {
   blob: Buffer;
 }
 
-export class WhatsApp {
+export default class WhatsApp {
   private apiSocket: WebSocket;
   private clientId?: string;
   private loginMsgId: string;
@@ -880,32 +880,3 @@ export class WhatsApp {
     };
   }
 }
-
-const wap = new WhatsApp(true);
-
-wap.on("ready", () => {
-  readFile(resolvePath(__dirname, "sticker.webp"), (err, file) => {
-    if (err) throw err;
-    wap.sendMediaMessage(
-      file,
-      "image/webp",
-      "stickerMessage",
-      "972529565871@s.whatsapp.net",
-      "בדיקה"
-    );
-  });
-});
-
-wap.on("message", msg => {
-  console.log(msg);
-  if (msg.message.stickerMessage) {
-    writeFile(
-      resolvePath(__dirname, "sticker.webp"),
-      msg.message.stickerMessage,
-      err => {
-        if (err) throw err;
-      }
-    );
-  }
-  // console.log(msg);
-});
