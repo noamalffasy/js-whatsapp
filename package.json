@@ -24,5 +24,8 @@
     "qrcode": "^1.4.1",
     "sharp": "^0.23.1",
     "ws": "^7.1.2"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
   }
 }
