@@ -4,12 +4,24 @@ This library allows you to make a WhatsApp bot in JS or TS. The library implemen
 
 The library is based on [Sigalor's WhatsApp Web Python library](https://github.com/sigalor/whatsapp-web-reveng).
 
+## Installation
+
+```bash
+npm install -S @noamalffasy/js-whatsapp
+```
+
+or
+
+```bash
+yarn add @noamalffasy/js-whatsapp
+```
+
 ## Usage
 
 ### Setting up
 
 ```js
-import Whatsapp from "libname-tbd";
+import Whatsapp from "@noamalffasy/js-whatsapp";
 
 const wap = new Whatsapp();
 ```
@@ -37,16 +49,16 @@ const wap = new Whatsapp(true);
 As of now, 2 events are supported: `ready` and `message`.
 
 ```js
-import Whatsapp from "libname-tbd";
+import Whatsapp from "@noamalffasy/js-whatsapp";
 
 const wap = new Whatsapp();
 
 wap.on("ready", () => {
-    // Your code goes here
+  // Your code goes here
 });
 
 wap.on("message", msg => {
-    // Your code goes here
+  // Your code goes here
 });
 ```
 
@@ -63,7 +75,7 @@ If you'd like to see your contacts' and chats' Jids you can access the `contactL
 Once you've got your Jids you can send messages like so:
 
 ```js
-import Whatsapp from "libname-tbd";
+import Whatsapp from "@noamalffasy/js-whatsapp";
 
 const wap = new Whatsapp();
 
@@ -72,16 +84,22 @@ wap.sendTextMessage("[text to send]", "[jid]");
 
 ### Sending quoted messages
 
-As of now, the library supports only text messages so the example is only for text. 
+As of now, the library supports only text messages so the example is only for text.
 
 In order to quote a message you need to get its ID, the sender's Jid and the message's text.
 
 ```js
-import Whatsapp from "libname-tbd";
+import Whatsapp from "@noamalffasy/js-whatsapp";
 
 const wap = new Whatsapp();
 
-wap.sendQuotedTextMessage("[text to send]", "[jid of group or contact to send the message to]", "[the jid of the message's sender]", "[the quoted message's content]", "[the quoted message's ID]")
+wap.sendQuotedTextMessage(
+  "[text to send]",
+  "[jid of group or contact to send the message to]",
+  "[the jid of the message's sender]",
+  "[the quoted message's content]",
+  "[the quoted message's ID]"
+);
 ```
 
 ## Legal
