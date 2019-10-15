@@ -534,9 +534,15 @@ export default class WhatsApp {
     const msg = await whatsappReadBinary(data, true);
 
     (msg.content as WANode[]).forEach(async node => {
-      if (node.description === "user") {
+      if (
+        node.description === "user" &&
+        ((node.attributes as unknown) as WAContact).jid.endsWith("c.us")
+      ) {
         this.contactList.push((node.attributes as unknown) as WAContact);
-      } else if (node.description === "chat") {
+      } else if (
+        node.description === "chat" &&
+        ((node.attributes as unknown) as WAChat).jid.endsWith("g.us")
+      ) {
         this.chatList.push((node.attributes as unknown) as WAChat);
       } else if (((node as unknown) as WAWebMessage).message) {
         const msg = (node as unknown) as WAWebMessage;
@@ -557,7 +563,10 @@ export default class WhatsApp {
             msg.author = contact.name ? contact.name : contact.notify;
           }
         } else {
-          const userJid = msg.key.remoteJid!.replace("@s.whatsapp.net", "@c.us");
+          const userJid = msg.key.remoteJid!.replace(
+            "@s.whatsapp.net",
+            "@c.us"
+          );
           const contact = this.contactList.filter(
             contact =>
               contact.jid.replace("\0", "").substring(0, 11) ===
@@ -864,13 +873,9 @@ export default class WhatsApp {
       await qrcode.toDataURL(`${data.ref},${publicKeyBase64},${this.clientId}`)
     );
 
-    writeFile(
-      resolvePath(".", `qrcode.${qrCode.type}`),
-      qrCode.data,
-      err => {
-        console.error(err);
-      }
-    );
+    writeFile(resolvePath(".", `qrcode.${qrCode.type}`), qrCode.data, err => {
+      console.error(err);
+    });
   }
 
   private init(loginMsgId: string, restoreSession: boolean) {
