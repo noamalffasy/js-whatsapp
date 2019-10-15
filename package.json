@@ -1,9 +1,10 @@
 {
   "name": "@noamalffasy/js-whatsapp",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A WhatsApp bot library",
   "author": "Noam Alffasy <noahm1234@outlook.com>",
   "license": "MIT",
+  "main": "dist/main.js",
   "scripts": {
     "start": "node dist/main.js",
     "debug": "tsc && node --nolazy --inspect-brk=9229 dist/main.js"
