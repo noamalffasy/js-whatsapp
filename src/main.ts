@@ -239,7 +239,7 @@ interface WAWebMessage {
     | "PLAYED"
     | null;
   participant?: string | null;
-  participantName?: string;
+  author?: string;
   messageStubType?:
     | "UNKNOWN"
     | "REVOKE"
@@ -554,7 +554,18 @@ export default class WhatsApp {
           )[0];
 
           if (contact) {
-            msg.participantName = contact.name ? contact.name : contact.notify;
+            msg.author = contact.name ? contact.name : contact.notify;
+          }
+        } else {
+          const userJid = msg.key.remoteJid!.replace("@s.whatsapp.net", "@c.us");
+          const contact = this.contactList.filter(
+            contact =>
+              contact.jid.replace("\0", "").substring(0, 11) ===
+              userJid.substring(0, 11)
+          )[0];
+
+          if (contact) {
+            msg.author = contact.name ? contact.name : contact.notify;
           }
         }
 
