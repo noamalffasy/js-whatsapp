@@ -465,7 +465,7 @@ export default class WhatsApp {
           ) {
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive, 20 * 60 * 1000);
-            this.saveKeys(resolvePath(__dirname, "keys.json"));
+            this.saveKeys(resolvePath(".", "keys.json"));
           } else if (
             Array.isArray(data) &&
             data.length >= 2 &&
@@ -854,7 +854,7 @@ export default class WhatsApp {
     );
 
     writeFile(
-      resolvePath(__dirname, `qrcode.${qrCode.type}`),
+      resolvePath(".", `qrcode.${qrCode.type}`),
       qrCode.data,
       err => {
         console.error(err);
@@ -867,7 +867,7 @@ export default class WhatsApp {
       if (!restoreSession) {
         this.clientId = crypto.randomBytes(16).toString("base64");
       } else {
-        await this.getKeys(resolvePath(__dirname, "keys.json"));
+        await this.getKeys(resolvePath(".", "keys.json"));
       }
 
       e.target.send(
