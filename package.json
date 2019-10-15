@@ -7,7 +7,8 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "node dist/main.js",
-    "debug": "tsc && node --nolazy --inspect-brk=9229 dist/main.js"
+    "debug": "tsc && node --nolazy --inspect-brk=9229 dist/main.js",
+    "postpublish": "npm publish --ignore-scripts --@noamalffasy:registry='https://npm.pkg.github.com'"
   },
   "devDependencies": {
     "@types/node": "^12.7.3",
@@ -29,8 +30,5 @@
   "files": [
     "dist/**/*",
     "spec/*"
-  ],
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  }
+  ]
 }
