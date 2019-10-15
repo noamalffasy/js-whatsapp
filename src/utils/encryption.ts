@@ -10,7 +10,7 @@ export function dataUrlToBuffer(dataString: string) {
   )!;
 
   const type = matches[1];
-  const data = new Buffer(matches[2], "base64");
+  const data = Buffer.from(matches[2], "base64");
 
   return { type, data };
 }
