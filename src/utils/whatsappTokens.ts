@@ -1,3 +1,5 @@
+import { resolve as resolvePath } from "path";
+
 import protobuf from "protobufjs";
 
 export const WATags = {
@@ -250,9 +252,11 @@ export const WASingleByteTokens = [
 ];
 export const WADoubleByteTokens = [];
 
+const specPath = resolvePath(__dirname, "../../spec/def.proto");
+
 export class WAWebMessageInfo {
   static async decode(data: Uint8Array) {
-    return await protobuf.load("./src/spec/def.proto").then(root => {
+    return await protobuf.load(specPath).then(root => {
       const msgType = root.lookupType("proto.WebMessageInfo")!;
       const msg = msgType.decode(data);
       return msg.toJSON();
@@ -260,7 +264,7 @@ export class WAWebMessageInfo {
   }
 
   static async encode(msg: { [k: string]: any }) {
-    return await protobuf.load("./src/spec/def.proto").then(root => {
+    return await protobuf.load(specPath).then(root => {
       const msgType = root.lookupType("proto.WebMessageInfo")!;
       const data = msgType.fromObject(msg);
       return msgType.encode(data).finish();
