@@ -433,7 +433,7 @@ export default class WhatsApp {
   private keepAlive() {
     if (this.apiSocket) {
       this.apiSocket.send("?,,");
-      setTimeout(this.keepAlive, 20 * 60 * 1000);
+      setTimeout(this.keepAlive.bind(this), 20 * 1000);
     }
   }
 
@@ -464,7 +464,7 @@ export default class WhatsApp {
             data[1].secret
           ) {
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
-            setTimeout(this.keepAlive, 20 * 60 * 1000);
+            setTimeout(this.keepAlive.bind(this), 20 * 1000);
             this.saveKeys(resolvePath(".", "keys.json"));
           } else if (
             Array.isArray(data) &&
@@ -479,8 +479,8 @@ export default class WhatsApp {
             this.clientToken = clientToken;
             this.serverToken = serverToken;
 
-            setTimeout(this.keepAlive, 20 * 60 * 1000);
-            this.saveKeys(resolvePath(__dirname, "keys.json"));
+            setTimeout(this.keepAlive.bind(this), 20 * 1000);
+            this.saveKeys(resolvePath(".", "keys.json"));
           } else if (
             Array.isArray(data) &&
             data.length >= 2 &&
