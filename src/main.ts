@@ -117,6 +117,7 @@ interface WADecryptedMedia {
   buffer: Buffer;
   gifPlayback: boolean;
   caption?: string;
+  contextInfo?: WAContextInfo
 }
 
 interface WAMedia {
@@ -144,6 +145,7 @@ interface WAReceiveMedia {
   url: string;
   caption?: string;
   gifPlayback: boolean;
+  contextInfo?: WAContextInfo
 }
 
 interface WAReceiveDocumentMessage extends WAReceiveMedia {
@@ -929,9 +931,10 @@ export default class WhatsApp {
 
     return {
       type,
-      buffer: Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file))),
+      caption: mediaObj.caption,
+      contextInfo: mediaObj.contextInfo,
       gifPlayback: mediaObj.gifPlayback,
-      caption: mediaObj.caption
+      buffer: Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file))),
     };
   }
 
