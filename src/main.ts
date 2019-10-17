@@ -113,6 +113,7 @@ interface WAContact {
 }
 
 interface WADecryptedMedia {
+  type: "image" | "sticker" | "video" | "document" | "audio";
   buffer: Buffer;
   gifPlayback: boolean;
   caption?: string;
@@ -228,13 +229,14 @@ interface WAProtocolMessage {
 
 interface WAMessage {
   conversation?: string | null;
-  imageMessage?: WAReceiveMedia | WADecryptedMedia | null;
   extendedTextMessage?: WAExtendedTextMessage | null;
-  documentMessage?: WAReceiveMedia | WADecryptedMedia | null;
-  audioMessage?: WAReceiveMedia | WADecryptedMedia | null;
-  videoMessage?: WAReceiveMedia | WADecryptedMedia | null;
+  decryptedMediaMessage?: WADecryptedMedia;
+  imageMessage?: WAReceiveMedia | null;
+  documentMessage?: WAReceiveMedia | null;
+  audioMessage?: WAReceiveMedia | null;
+  videoMessage?: WAReceiveMedia | null;
+  stickerMessage?: WAReceiveMedia | null;
   protocolMessage?: WAProtocolMessage | null;
-  stickerMessage?: WAReceiveMedia | WADecryptedMedia | null;
 }
 
 interface WAWebMessage {
@@ -599,29 +601,29 @@ export default class WhatsApp {
         }
 
         if (msg.message.stickerMessage) {
-          msg.message.stickerMessage = await this.decryptMedia(
+          msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.stickerMessage as WAReceiveMedia,
-            "stickerMessage"
+            "sticker"
           );
         } else if (msg.message.imageMessage) {
-          msg.message.imageMessage = await this.decryptMedia(
+          msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.imageMessage as WAReceiveMedia,
-            "imageMessage"
+            "image"
           );
         } else if (msg.message.videoMessage) {
-          msg.message.videoMessage = await this.decryptMedia(
+          msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.videoMessage as WAReceiveMedia,
-            "videoMessage"
+            "video"
           );
         } else if (msg.message.audioMessage) {
-          msg.message.audioMessage = await this.decryptMedia(
+          msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.audioMessage as WAReceiveMedia,
-            "audioMessage"
+            "audio"
           );
         } else if (msg.message.documentMessage) {
-          msg.message.documentMessage = await this.decryptMedia(
+          msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.documentMessage as WAReceiveMedia,
-            "documentMessage"
+            "document"
           );
         }
 
@@ -750,12 +752,7 @@ export default class WhatsApp {
   public async sendMediaMessage(
     file: Buffer,
     mimetype: string,
-    msgType:
-      | "imageMessage"
-      | "stickerMessage"
-      | "videoMessage"
-      | "audioMessage"
-      | "documentMessage",
+    msgType: "image" | "sticker" | "video" | "audio" | "document",
     remoteJid: string,
     caption: string | undefined = undefined,
     duration: number | undefined = undefined,
@@ -796,23 +793,23 @@ export default class WhatsApp {
       blob: Buffer.from(concatIntArray(enc, mac))
     };
 
-    if (msgType === "stickerMessage") {
+    if (msgType === "sticker") {
       this.mediaQueue[messageTag].pngThumbnail = await sharp(file)
         .resize(100)
         .png()
         .toBuffer();
-    } else if (msgType === "imageMessage") {
+    } else if (msgType === "image") {
       this.mediaQueue[messageTag].jpegThumbnail = await sharp(file)
         .resize(100)
         .jpeg()
         .toBuffer();
-    } else if (msgType === "audioMessage") {
+    } else if (msgType === "audio") {
       if (duration) {
         this.mediaQueue[messageTag].seconds = duration;
       } else {
         throw new Error("Audio messages require duration");
       }
-    } else if (msgType === "videoMessage") {
+    } else if (msgType === "video") {
       this.mediaQueue[messageTag].gifPlayback = isGif;
     }
   }
@@ -832,13 +829,8 @@ export default class WhatsApp {
 
   private async decryptMedia(
     mediaObj: WAReceiveMedia,
-    type:
-      | "imageMessage"
-      | "stickerMessage"
-      | "videoMessage"
-      | "audioMessage"
-      | "documentMessage"
-  ) {
+    type: "image" | "sticker" | "video" | "audio" | "document"
+  ): Promise<WADecryptedMedia> {
     const mediaKey = Uint8Array.from(Buffer.from(mediaObj.mediaKey, "base64"));
     const mediaKeyExpanded = HKDF(mediaKey, 112, WAMediaAppInfo[type]);
     const iv = mediaKeyExpanded.slice(0, 16);
@@ -859,6 +851,7 @@ export default class WhatsApp {
     }
 
     return {
+      type,
       buffer: Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file))),
       gifPlayback: mediaObj.gifPlayback,
       caption: mediaObj.caption

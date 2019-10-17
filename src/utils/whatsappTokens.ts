@@ -79,11 +79,11 @@ export const WAFlags = {
   SKIP_OFFLINE: 1 << 2
 };
 export const WAMediaAppInfo = {
-  imageMessage: "WhatsApp Image Keys",
-  stickerMessage: "WhatsApp Image Keys",
-  videoMessage: "WhatsApp Video Keys",
-  audioMessage: "WhatsApp Audio Keys",
-  documentMessage: "WhatsApp Document Keys"
+  image: "WhatsApp Image Keys",
+  sticker: "WhatsApp Image Keys",
+  video: "WhatsApp Video Keys",
+  audio: "WhatsApp Audio Keys",
+  document: "WhatsApp Document Keys"
 };
 
 export const WASingleByteTokens = [
