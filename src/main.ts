@@ -112,6 +112,12 @@ interface WAContact {
   notify?: string;
 }
 
+interface WADecryptedMedia {
+  buffer: Buffer;
+  gifPlayback: boolean;
+  caption?: string;
+}
+
 interface WAMedia {
   fileEncSha256: Uint8Array;
   fileLength: number;
@@ -121,6 +127,9 @@ interface WAMedia {
   url: string;
   jpegThumbnail?: Buffer;
   pngThumbnail?: Buffer;
+  gifPlayback?: boolean;
+  seconds?: number;
+  caption?: string;
 }
 
 interface WAReceiveMedia {
@@ -132,6 +141,8 @@ interface WAReceiveMedia {
   mediaKeyTimestamp: number;
   mimetype: string;
   url: string;
+  caption?: string;
+  gifPlayback: boolean;
 }
 
 interface WAMessageKey {
@@ -217,13 +228,13 @@ interface WAProtocolMessage {
 
 interface WAMessage {
   conversation?: string | null;
-  imageMessage?: WAReceiveMedia | Buffer | null;
+  imageMessage?: WAReceiveMedia | WADecryptedMedia | null;
   extendedTextMessage?: WAExtendedTextMessage | null;
-  documentMessage?: WAReceiveMedia | Buffer | null;
-  audioMessage?: WAReceiveMedia | Buffer | null;
-  videoMessage?: WAReceiveMedia | Buffer | null;
+  documentMessage?: WAReceiveMedia | WADecryptedMedia | null;
+  audioMessage?: WAReceiveMedia | WADecryptedMedia | null;
+  videoMessage?: WAReceiveMedia | WADecryptedMedia | null;
   protocolMessage?: WAProtocolMessage | null;
-  stickerMessage?: WAReceiveMedia | Buffer | null;
+  stickerMessage?: WAReceiveMedia | WADecryptedMedia | null;
 }
 
 interface WAWebMessage {
@@ -321,7 +332,6 @@ interface WASendMedia extends WAMedia {
   id: string;
   msgType: string;
   remoteJid: string;
-  caption?: string;
   blob: Buffer;
 }
 
@@ -466,6 +476,8 @@ export default class WhatsApp {
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
             this.saveKeys(resolvePath(".", "keys.json"));
+            this.readyListener();
+            this.readyListener = () => {};
           } else if (
             Array.isArray(data) &&
             data.length >= 2 &&
@@ -481,6 +493,8 @@ export default class WhatsApp {
 
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
             this.saveKeys(resolvePath(".", "keys.json"));
+            this.readyListener();
+            this.readyListener = () => {};
           } else if (
             Array.isArray(data) &&
             data.length >= 2 &&
@@ -503,8 +517,6 @@ export default class WhatsApp {
             !(data as WhatsAppLoginPayload).ref &&
             messageTag === loginMsgId
           ) {
-            this.readyListener();
-            this.readyListener = () => {};
           } else if (this.mediaQueue[messageTag]) {
             this.uploadMedia(
               (data as WhatsAppUploadMediaURL).url,
@@ -721,7 +733,11 @@ export default class WhatsApp {
             fileLength: file.fileLength,
             fileSha256: file.fileSha256,
             fileEncSha256: file.fileEncSha256,
-            jpegThumbnail: file.jpegThumbnail
+            jpegThumbnail: file.jpegThumbnail,
+            pngThumbnail: file.pngThumbnail,
+            seconds: file.seconds,
+            caption: file.caption,
+            gifPlayback: file.gifPlayback
           },
           file.msgType,
           file.remoteJid
@@ -741,7 +757,9 @@ export default class WhatsApp {
       | "audioMessage"
       | "documentMessage",
     remoteJid: string,
-    caption: string | undefined = undefined
+    caption: string | undefined = undefined,
+    duration: number | undefined = undefined,
+    isGif: boolean = false
   ) {
     const messageTag = randHex(12).toUpperCase();
     const mediaKey = Uint8Array.from(crypto.randomBytes(32));
@@ -783,11 +801,19 @@ export default class WhatsApp {
         .resize(100)
         .png()
         .toBuffer();
-    } else {
+    } else if (msgType === "imageMessage") {
       this.mediaQueue[messageTag].jpegThumbnail = await sharp(file)
         .resize(100)
         .jpeg()
         .toBuffer();
+    } else if (msgType === "audioMessage") {
+      if (duration) {
+        this.mediaQueue[messageTag].seconds = duration;
+      } else {
+        throw new Error("Audio messages require duration");
+      }
+    } else if (msgType === "videoMessage") {
+      this.mediaQueue[messageTag].gifPlayback = isGif;
     }
   }
 
@@ -832,7 +858,11 @@ export default class WhatsApp {
       throw new Error("Invalid media data");
     }
 
-    return Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file)));
+    return {
+      buffer: Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file))),
+      gifPlayback: mediaObj.gifPlayback,
+      caption: mediaObj.caption
+    };
   }
 
   private setupEncryptionKeys(data: WhatsAppConnPayload) {
