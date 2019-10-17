@@ -369,10 +369,6 @@ export default class WhatsApp {
   chatList: WAChat[] = [];
   contactList: WAContact[] = [];
 
-  private mediaQueue: {
-    [k: string]: WASendMedia;
-  } = {};
-
   private messageListeners: ((msg: WAWebMessage) => void)[] = [];
   private eventListeners: {
     [key: string]: (e: WebSocket.MessageEvent) => void;
@@ -543,11 +539,6 @@ export default class WhatsApp {
             !(data as WhatsAppLoginPayload).ref &&
             messageTag === loginMsgId
           ) {
-          } else if (this.mediaQueue[messageTag]) {
-            this.uploadMedia(
-              (data as WhatsAppUploadMediaURL).url,
-              this.mediaQueue[messageTag]
-            );
           }
         } catch {}
       } else if (Buffer.isBuffer(e.data)) {
@@ -775,8 +766,6 @@ export default class WhatsApp {
           file.remoteJid,
           file.nextId
         );
-
-        delete this.mediaQueue[file.id];
 
         return media;
       });
