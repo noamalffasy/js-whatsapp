@@ -709,7 +709,7 @@ export default class WhatsApp {
     text: string,
     remoteJid: string,
     quotedJid: string,
-    quotedMsg: string,
+    quotedMsg: WAMessage,
     quotedId: string
   ) {
     return await this.sendMessage(
@@ -719,9 +719,11 @@ export default class WhatsApp {
           contextInfo: {
             stanzaId: quotedId,
             participant: quotedJid,
-            quotedMessage: {
-              conversation: quotedMsg
-            }
+            quotedMessage: quotedMsg.extendedTextMessage
+              ? {
+                  conversation: quotedMsg.extendedTextMessage.text
+                }
+              : quotedMsg
           }
         }
       },
