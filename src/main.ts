@@ -153,7 +153,7 @@ interface WAReceiveDocumentMessage extends WAReceiveMedia {
 interface WAContactMessage {
   displayName: string;
   vcard: string;
-  contextInfo: WAContextInfo;
+  contextInfo?: WAContextInfo;
 }
 
 interface WAMessageKey {
@@ -643,7 +643,7 @@ export default class WhatsApp {
     });
   }
 
-  public async sendMessage(content: any, remoteJid: string) {
+  public async sendMessage(content: WAMessage, remoteJid: string) {
     const id = "3EB0" + randHex(8).toUpperCase();
     const msgParams = {
       key: {
@@ -823,6 +823,44 @@ export default class WhatsApp {
     } else if (msgType === "video") {
       this.mediaQueue[messageTag].gifPlayback = isGif;
     }
+  }
+
+  public async sendVCardContact(remoteJid: string, vcard: string) {
+    const fullName = vcard.slice(
+      vcard.indexOf("FN:") + 3,
+      vcard.indexOf("\n", vcard.indexOf("FN:"))
+    );
+
+    this.sendMessage(
+      {
+        contactMessage: {
+          vcard,
+          displayName: fullName
+        }
+      },
+      remoteJid
+    );
+  }
+
+  public async sendContact(
+    remoteJid: string,
+    phoneNumber: string,
+    firstName: string,
+    lastName: string = ""
+  ) {
+    const fullName =
+      lastName.length > 0 ? `${firstName} ${lastName}` : firstName;
+    const vcard = `BEGIN:VCARD\nVERSION:3.0\nN:${lastName};${firstName};;\nFN:${fullName}\nTEL;TYPE=VOICE:${phoneNumber}\nEND:VCARD`;
+
+    this.sendMessage(
+      {
+        contactMessage: {
+          vcard,
+          displayName: fullName
+        }
+      },
+      remoteJid
+    );
   }
 
   private async sendMediaProto(
