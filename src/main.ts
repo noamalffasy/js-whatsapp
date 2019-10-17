@@ -343,6 +343,7 @@ interface WAWebMessage {
 
 interface WASendMedia extends WAMedia {
   id: string;
+  nextId: string;
   msgType: string;
   remoteJid: string;
   blob: Buffer;
@@ -372,7 +373,10 @@ export default class WhatsApp {
     [k: string]: WASendMedia;
   } = {};
 
-  private messageListener: (msg: WAWebMessage) => void = () => {};
+  private messageListeners: ((msg: WAWebMessage) => void)[] = [];
+  private eventListeners: {
+    [key: string]: (e: WebSocket.MessageEvent) => void;
+  } = {};
   private readyListener: () => void = () => {};
 
   constructor(restoreSession = false) {
@@ -398,7 +402,7 @@ export default class WhatsApp {
   ) {
     switch (event) {
       case "message":
-        this.messageListener = cb;
+        this.messageListeners.push(cb);
         break;
       case "ready":
         this.readyListener = cb as () => void;
@@ -406,6 +410,13 @@ export default class WhatsApp {
       default:
         break;
     }
+  }
+
+  private addEventListener(
+    cb: (e: WebSocket.MessageEvent) => void,
+    id: string
+  ) {
+    this.eventListeners[id] = cb;
   }
 
   private saveKeys(pathname: string) {
@@ -466,6 +477,8 @@ export default class WhatsApp {
 
   private onMessage(loginMsgId: string) {
     return async (e: WebSocket.MessageEvent) => {
+      Object.values(this.eventListeners).forEach(func => func(e));
+
       if (typeof e.data === "string") {
         try {
           const messageTag = e.data.substring(0, e.data.indexOf(","));
@@ -638,13 +651,17 @@ export default class WhatsApp {
           );
         }
 
-        this.messageListener(msg);
+        this.messageListeners.forEach(func => func(msg));
       }
     });
   }
 
-  public async sendMessage(content: WAMessage, remoteJid: string) {
-    const id = "3EB0" + randHex(8).toUpperCase();
+  public async sendMessage(
+    content: WAMessage,
+    remoteJid: string,
+    msgId?: string
+  ) {
+    const id = msgId ? msgId : "3EB0" + randHex(8).toUpperCase();
     const msgParams = {
       key: {
         id,
@@ -684,10 +701,12 @@ export default class WhatsApp {
 
     this.messageSentCount++;
     this.apiSocket.send(payload);
+
+    return { id, content };
   }
 
   public async sendTextMessage(text: string, remoteJid: string) {
-    await this.sendMessage(
+    return await this.sendMessage(
       {
         conversation: text
       },
@@ -702,7 +721,7 @@ export default class WhatsApp {
     quotedMsg: string,
     quotedId: string
   ) {
-    await this.sendMessage(
+    return await this.sendMessage(
       {
         extendedTextMessage: {
           text,
@@ -727,7 +746,7 @@ export default class WhatsApp {
       contentType: file.mimetype
     });
 
-    await fetch(`${uploadUrl}?f=j`, {
+    return await fetch(`${uploadUrl}?f=j`, {
       body,
       method: "POST",
       headers: {
@@ -737,8 +756,8 @@ export default class WhatsApp {
       }
     })
       .then(res => res.json())
-      .then((res: WhatsAppMediaUploadPayload) => {
-        this.sendMediaProto(
+      .then(async (res: WhatsAppMediaUploadPayload) => {
+        const media = await this.sendMediaProto(
           {
             url: res.url,
             mimetype: file.mimetype,
@@ -753,10 +772,13 @@ export default class WhatsApp {
             gifPlayback: file.gifPlayback
           },
           file.msgType,
-          file.remoteJid
+          file.remoteJid,
+          file.nextId
         );
 
         delete this.mediaQueue[file.id];
+
+        return media;
       });
   }
 
@@ -768,61 +790,82 @@ export default class WhatsApp {
     caption: string | undefined = undefined,
     duration: number | undefined = undefined,
     isGif: boolean = false
-  ) {
-    const messageTag = randHex(12).toUpperCase();
-    const mediaKey = Uint8Array.from(crypto.randomBytes(32));
-    const mediaKeyExpanded = HKDF(mediaKey, 112, WAMediaAppInfo[msgType]);
-    const iv = mediaKeyExpanded.slice(0, 16);
-    const cipherKey = mediaKeyExpanded.slice(16, 48);
-    const macKey = mediaKeyExpanded.slice(48, 80);
-    const enc = AESEncrypt(cipherKey, Uint8Array.from(file), iv, false);
-    const mac = HmacSha256(macKey, concatIntArray(iv, enc)).slice(0, 10);
-    const fileSha256 = Sha256(file);
-    const fileEncSha256 = Sha256(concatIntArray(enc, mac));
-    const type =
-      msgType.replace("Message", "") === "sticker"
-        ? "image"
-        : msgType.replace("Message", "");
+  ): Promise<{ id: string; content: WAMessage }> {
+    return new Promise(async resolve => {
+      const messageTag = randHex(12).toUpperCase();
+      const nextId = randHex(12).toUpperCase();
+      const mediaKey = Uint8Array.from(crypto.randomBytes(32));
+      const mediaKeyExpanded = HKDF(mediaKey, 112, WAMediaAppInfo[msgType]);
+      const iv = mediaKeyExpanded.slice(0, 16);
+      const cipherKey = mediaKeyExpanded.slice(16, 48);
+      const macKey = mediaKeyExpanded.slice(48, 80);
+      const enc = AESEncrypt(cipherKey, Uint8Array.from(file), iv, false);
+      const mac = HmacSha256(macKey, concatIntArray(iv, enc)).slice(0, 10);
+      const fileSha256 = Sha256(file);
+      const fileEncSha256 = Sha256(concatIntArray(enc, mac));
+      const type =
+        msgType.replace("Message", "") === "sticker"
+          ? "image"
+          : msgType.replace("Message", "");
 
-    this.apiSocket.send(
-      `${messageTag},["action", "encr_upload", "${type}", "${Buffer.from(
-        fileEncSha256
-      ).toString("base64")}"]`
-    );
+      this.apiSocket.send(
+        `${messageTag},["action", "encr_upload", "${type}", "${Buffer.from(
+          fileEncSha256
+        ).toString("base64")}"]`
+      );
 
-    this.mediaQueue[messageTag] = {
-      msgType,
-      caption,
-      mimetype,
-      url: "",
-      mediaKey,
-      remoteJid,
-      fileSha256,
-      fileEncSha256,
-      id: messageTag,
-      fileLength: file.byteLength,
-      blob: Buffer.from(concatIntArray(enc, mac))
-    };
+      const mediaObj: WASendMedia = {
+        nextId,
+        msgType,
+        caption,
+        mimetype,
+        url: "",
+        mediaKey,
+        remoteJid,
+        fileSha256,
+        fileEncSha256,
+        id: messageTag,
+        fileLength: file.byteLength,
+        blob: Buffer.from(concatIntArray(enc, mac))
+      };
 
-    if (msgType === "sticker") {
-      this.mediaQueue[messageTag].pngThumbnail = await sharp(file)
-        .resize(100)
-        .png()
-        .toBuffer();
-    } else if (msgType === "image") {
-      this.mediaQueue[messageTag].jpegThumbnail = await sharp(file)
-        .resize(100)
-        .jpeg()
-        .toBuffer();
-    } else if (msgType === "audio") {
-      if (duration) {
-        this.mediaQueue[messageTag].seconds = duration;
-      } else {
-        throw new Error("Audio messages require duration");
+      if (msgType === "sticker") {
+        mediaObj.pngThumbnail = await sharp(file)
+          .resize(100)
+          .png()
+          .toBuffer();
+      } else if (msgType === "image") {
+        mediaObj.jpegThumbnail = await sharp(file)
+          .resize(100)
+          .jpeg()
+          .toBuffer();
+      } else if (msgType === "audio") {
+        if (duration) {
+          mediaObj.seconds = duration;
+        } else {
+          throw new Error("Audio messages require duration");
+        }
+      } else if (msgType === "video") {
+        mediaObj.gifPlayback = isGif;
       }
-    } else if (msgType === "video") {
-      this.mediaQueue[messageTag].gifPlayback = isGif;
-    }
+
+      this.addEventListener(async e => {
+        if (typeof e.data === "string") {
+          const recievedMessageId = e.data.substring(0, e.data.indexOf(","));
+
+          if (recievedMessageId === messageTag) {
+            const data = JSON.parse(
+              e.data.substring(e.data.indexOf(",") + 1)
+            ) as WhatsAppUploadMediaURL;
+            const media = await this.uploadMedia(data.url, mediaObj);
+
+            delete this.eventListeners[messageTag];
+
+            resolve({ id: mediaObj.nextId, content: media.content });
+          }
+        }
+      }, messageTag);
+    });
   }
 
   public async sendVCardContact(remoteJid: string, vcard: string) {
@@ -831,7 +874,7 @@ export default class WhatsApp {
       vcard.indexOf("\n", vcard.indexOf("FN:"))
     );
 
-    this.sendMessage(
+    return await this.sendMessage(
       {
         contactMessage: {
           vcard,
@@ -852,27 +895,21 @@ export default class WhatsApp {
       lastName.length > 0 ? `${firstName} ${lastName}` : firstName;
     const vcard = `BEGIN:VCARD\nVERSION:3.0\nN:${lastName};${firstName};;\nFN:${fullName}\nTEL;TYPE=VOICE:${phoneNumber}\nEND:VCARD`;
 
-    this.sendMessage(
-      {
-        contactMessage: {
-          vcard,
-          displayName: fullName
-        }
-      },
-      remoteJid
-    );
+    return await this.sendVCardContact(remoteJid, vcard);
   }
 
   private async sendMediaProto(
     mediaFile: WAMedia,
     msgType: string,
-    remoteJid: string
+    remoteJid: string,
+    msgId: string
   ) {
-    await this.sendMessage(
+    return await this.sendMessage(
       {
         [msgType + "Message"]: mediaFile
       },
-      remoteJid
+      remoteJid,
+      msgId
     );
   }
 
