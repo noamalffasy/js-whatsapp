@@ -146,6 +146,16 @@ interface WAReceiveMedia {
   gifPlayback: boolean;
 }
 
+interface WAReceiveDocumentMessage extends WAReceiveMedia {
+  fileName: string;
+}
+
+interface WAContactMessage {
+  displayName: string;
+  vcard: string;
+  contextInfo: WAContextInfo;
+}
+
 interface WAMessageKey {
   remoteJid?: string | null;
   fromMe?: boolean | null;
@@ -231,11 +241,12 @@ interface WAMessage {
   conversation?: string | null;
   extendedTextMessage?: WAExtendedTextMessage | null;
   decryptedMediaMessage?: WADecryptedMedia;
+  documentMessage?: WAReceiveDocumentMessage | null;
   imageMessage?: WAReceiveMedia | null;
-  documentMessage?: WAReceiveMedia | null;
   audioMessage?: WAReceiveMedia | null;
   videoMessage?: WAReceiveMedia | null;
   stickerMessage?: WAReceiveMedia | null;
+  contactMessage?: WAContactMessage | null;
   protocolMessage?: WAProtocolMessage | null;
 }
 
@@ -821,7 +832,7 @@ export default class WhatsApp {
   ) {
     await this.sendMessage(
       {
-        [msgType]: mediaFile
+        [msgType + "Message"]: mediaFile
       },
       remoteJid
     );
