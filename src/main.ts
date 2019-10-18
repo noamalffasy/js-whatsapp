@@ -245,6 +245,13 @@ interface WAProtocolMessage {
   ephemeralExpiration?: number | null;
 }
 
+interface WALocationMessage {
+  degreesLatitude: number;
+  degreesLongitude: number;
+  jpegThumbnail?: string;
+  contextInfo?: WAContextInfo;
+}
+
 interface WAMessage {
   conversation?: string | null;
   extendedTextMessage?: WAExtendedTextMessage | null;
@@ -256,6 +263,7 @@ interface WAMessage {
   stickerMessage?: WAReceiveMedia | null;
   contactMessage?: WAContactMessage | null;
   protocolMessage?: WAProtocolMessage | null;
+  locationMessage?: WALocationMessage | null;
 }
 
 interface WAWebMessage {
@@ -898,6 +906,22 @@ export default class WhatsApp {
     const vcard = `BEGIN:VCARD\nVERSION:3.0\nN:${lastName};${firstName};;\nFN:${fullName}\nTEL;TYPE=VOICE:${phoneNumber}\nEND:VCARD`;
 
     return await this.sendVCardContact(remoteJid, vcard);
+  }
+
+  public async sendLocation(
+    remoteJid: string,
+    latitude: number,
+    longitude: number
+  ) {
+    return await this.sendMessage(
+      {
+        locationMessage: {
+          degreesLatitude: latitude,
+          degreesLongitude: longitude
+        }
+      },
+      remoteJid
+    );
   }
 
   private async sendMediaProto(
