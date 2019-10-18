@@ -117,7 +117,7 @@ interface WADecryptedMedia {
   buffer: Buffer;
   gifPlayback: boolean;
   caption?: string;
-  contextInfo?: WAContextInfo
+  contextInfo?: WAContextInfo;
 }
 
 interface WAMedia {
@@ -145,7 +145,7 @@ interface WAReceiveMedia {
   url: string;
   caption?: string;
   gifPlayback: boolean;
-  contextInfo?: WAContextInfo
+  contextInfo?: WAContextInfo;
 }
 
 interface WAReceiveDocumentMessage extends WAReceiveMedia {
@@ -934,8 +934,23 @@ export default class WhatsApp {
       caption: mediaObj.caption,
       contextInfo: mediaObj.contextInfo,
       gifPlayback: mediaObj.gifPlayback,
-      buffer: Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file))),
+      buffer: Buffer.from(AESDecrypt(cipherKey, concatIntArray(iv, file)))
     };
+  }
+
+  public async deleteMessage(remoteJid: string, msgId: string) {
+    return await this.sendMessage(
+      {
+        protocolMessage: {
+          key: {
+            remoteJid,
+            id: msgId
+          },
+          type: "REVOKE"
+        }
+      },
+      remoteJid
+    );
   }
 
   private setupEncryptionKeys(data: WhatsAppConnPayload) {
