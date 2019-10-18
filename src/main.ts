@@ -84,6 +84,12 @@ interface WhatsAppUploadMediaURL {
   url: string;
 }
 
+interface WhatsAppProfilePicPayload {
+  eurl?: string;
+  status?: number;
+  tag: string;
+}
+
 interface WhatsAppMediaUploadPayload {
   filehash: string;
   mimetype: string;
@@ -371,7 +377,10 @@ export default class WhatsApp {
   chatList: WAChat[] = [];
   contactList: WAContact[] = [];
 
-  private messageListeners: ((msg: WAWebMessage) => void)[] = [];
+  private messageListeners: ((
+    msg: WAWebMessage,
+    description: string
+  ) => void)[] = [];
   private eventListeners: {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
@@ -396,7 +405,7 @@ export default class WhatsApp {
 
   public on(
     event: "message" | "ready",
-    cb: (() => void) | ((msg: WAWebMessage) => void)
+    cb: (() => void) | ((msg: WAWebMessage, description: string) => void)
   ) {
     switch (event) {
       case "message":
@@ -562,9 +571,9 @@ export default class WhatsApp {
     }
 
     const data = AESDecrypt(this.encKey, messageContent.slice(32));
-    const msg = await whatsappReadBinary(data, true);
+    const allMsgs = await whatsappReadBinary(data, true);
 
-    (msg.content as WANode[]).forEach(async node => {
+    (allMsgs.content as WANode[]).forEach(async node => {
       if (
         node.description === "user" &&
         ((node.attributes as unknown) as WAContact).jid.endsWith("c.us")
@@ -644,7 +653,7 @@ export default class WhatsApp {
           );
         }
 
-        this.messageListeners.forEach(func => func(msg));
+        this.messageListeners.forEach(func => func(msg, allMsgs.description));
       }
     });
   }
@@ -951,6 +960,37 @@ export default class WhatsApp {
       },
       remoteJid
     );
+  }
+
+  public async getProfilePicThumb(
+    jid: string
+  ): Promise<{ id: string; content?: Buffer; status?: number }> {
+    return new Promise(resolve => {
+      const msgId = randHex(12).toUpperCase();
+      this.apiSocket.send(`${msgId},["query", "ProfilePicThumb", "${jid}"]`);
+
+      this.addEventListener(async e => {
+        if (typeof e.data === "string") {
+          const recievedMessageId = e.data.substring(0, e.data.indexOf(","));
+
+          if (recievedMessageId === msgId) {
+            const data = JSON.parse(
+              e.data.substring(e.data.indexOf(",") + 1)
+            ) as WhatsAppProfilePicPayload;
+            delete this.eventListeners[msgId];
+
+            if (data.eurl) {
+              resolve({
+                id: msgId,
+                content: await fetch(data.eurl).then(res => res.buffer())
+              });
+            } else if (data.status) {
+              resolve({ id: msgId, status: data.status });
+            }
+          }
+        }
+      }, msgId);
+    });
   }
 
   private setupEncryptionKeys(data: WhatsAppConnPayload) {
