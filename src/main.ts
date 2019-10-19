@@ -886,6 +886,28 @@ export default class WhatsApp {
     );
   }
 
+  public async sendQuotedLocation(
+    latitude: number,
+    longitude: number,
+    remoteJid: string,
+    quotedAuthorJid: string,
+    quotedMsg: WAMessage,
+    quotedMsgId: string
+  ) {
+    return await this.sendQuotedMessage(
+      {
+        locationMessage: {
+          degreesLatitude: latitude,
+          degreesLongitude: longitude
+        }
+      },
+      remoteJid,
+      quotedAuthorJid,
+      quotedMsg,
+      quotedMsgId
+    );
+  }
+
   private async uploadMedia(uploadUrl: string, file: WASendMedia) {
     const body = new FormData();
     body.append("hash", Buffer.from(file.fileEncSha256).toString("base64"));
