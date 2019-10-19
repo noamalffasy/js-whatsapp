@@ -792,6 +792,22 @@ export default class WhatsApp {
     }
   }
 
+  public async sendQuotedTextMessage(
+    text: string,
+    remoteJid: string,
+    quotedAuthorJid: string,
+    quotedMsg: WAMessage,
+    quotedMsgId: string
+  ) {
+    return await this.sendQuotedMessage(
+      { conversation: text },
+      remoteJid,
+      quotedAuthorJid,
+      quotedMsg,
+      quotedMsgId
+    );
+  }
+
   public async sendQuotedMediaMessage(
     file: Buffer,
     mimetype: string,
@@ -822,15 +838,47 @@ export default class WhatsApp {
     );
   }
 
-  public async sendQuotedTextMessage(
-    text: string,
+  public async sendQuotedContactVCard(
+    vcard: string,
     remoteJid: string,
     quotedAuthorJid: string,
     quotedMsg: WAMessage,
     quotedMsgId: string
   ) {
+    const fullName = vcard.slice(
+      vcard.indexOf("FN:") + 3,
+      vcard.indexOf("\n", vcard.indexOf("FN:"))
+    );
+
     return await this.sendQuotedMessage(
-      { conversation: text },
+      {
+        contactMessage: {
+          vcard,
+          displayName: fullName
+        }
+      },
+      remoteJid,
+      quotedAuthorJid,
+      quotedMsg,
+      quotedMsgId
+    );
+  }
+
+  public async sendQuotedContact(
+    phoneNumber: string,
+    firstName: string,
+    lastName: string = "",
+    remoteJid: string,
+    quotedAuthorJid: string,
+    quotedMsg: WAMessage,
+    quotedMsgId: string
+  ) {
+    const fullName =
+      lastName.length > 0 ? `${firstName} ${lastName}` : firstName;
+    const vcard = `BEGIN:VCARD\nVERSION:3.0\nN:${lastName};${firstName};;\nFN:${fullName}\nTEL;TYPE=VOICE:${phoneNumber}\nEND:VCARD`;
+
+    this.sendQuotedContactVCard(
+      vcard,
       remoteJid,
       quotedAuthorJid,
       quotedMsg,
