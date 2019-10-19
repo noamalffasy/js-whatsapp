@@ -1159,6 +1159,7 @@ export default class WhatsApp {
         protocolMessage: {
           key: {
             remoteJid,
+            fromMe: true,
             id: msgId
           },
           type: "REVOKE"
