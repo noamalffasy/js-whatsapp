@@ -31,7 +31,7 @@ import {
   WAFlags
 } from "./utils/whatsappTokens";
 
-interface WhatsAppLoginPayload {
+export interface WhatsAppLoginPayload {
   status: number;
   ref: string;
   ttl: 200000;
@@ -40,7 +40,7 @@ interface WhatsAppLoginPayload {
   time: number;
 }
 
-interface WhatsAppConnPayload {
+export interface WhatsAppConnPayload {
   0: "Conn";
   1: {
     battery: number;
@@ -63,14 +63,14 @@ interface WhatsAppConnPayload {
   };
 }
 
-interface WhatsAppStreamPayload {
+export interface WhatsAppStreamPayload {
   0: "Stream";
   1: "update";
   2: boolean;
   3: string;
 }
 
-interface WhatsAppPropsPayload {
+export interface WhatsAppPropsPayload {
   0: "Props";
   1: {
     imageMaxKBytes: 1024;
@@ -79,18 +79,18 @@ interface WhatsAppPropsPayload {
   };
 }
 
-interface WhatsAppUploadMediaURL {
+export interface WhatsAppUploadMediaURL {
   status: number;
   url: string;
 }
 
-interface WhatsAppProfilePicPayload {
+export interface WhatsAppProfilePicPayload {
   eurl?: string;
   status?: number;
   tag: string;
 }
 
-interface WhatsAppMediaUploadPayload {
+export interface WhatsAppMediaUploadPayload {
   filehash: string;
   mimetype: string;
   size: string;
@@ -98,7 +98,7 @@ interface WhatsAppMediaUploadPayload {
   url: string;
 }
 
-interface WAChat {
+export interface WAChat {
   count: string;
   jid: string;
   message: string;
@@ -108,7 +108,7 @@ interface WAChat {
   t: string;
 }
 
-interface WAContact {
+export interface WAContact {
   jid: string;
   index?: string;
   name?: string;
@@ -118,7 +118,7 @@ interface WAContact {
   notify?: string;
 }
 
-interface WADecryptedMedia {
+export interface WADecryptedMedia {
   type: "image" | "sticker" | "video" | "document" | "audio";
   buffer: Buffer;
   gifPlayback: boolean;
@@ -126,7 +126,7 @@ interface WADecryptedMedia {
   contextInfo?: WAContextInfo;
 }
 
-interface WAMedia {
+export interface WAMedia {
   fileEncSha256: Uint8Array;
   fileLength: number;
   fileSha256: Uint8Array;
@@ -140,7 +140,7 @@ interface WAMedia {
   caption?: string;
 }
 
-interface WAReceiveMedia {
+export interface WAReceiveMedia {
   directPath: string;
   fileEncSha256: Uint8Array;
   fileLength: number;
@@ -154,17 +154,17 @@ interface WAReceiveMedia {
   contextInfo?: WAContextInfo;
 }
 
-interface WAReceiveDocumentMessage extends WAReceiveMedia {
+export interface WAReceiveDocumentMessage extends WAReceiveMedia {
   fileName: string;
 }
 
-interface WAContactMessage {
+export interface WAContactMessage {
   displayName: string;
   vcard: string;
   contextInfo?: WAContextInfo;
 }
 
-interface WAMessageKey {
+export interface WAMessageKey {
   remoteJid?: string | null;
   fromMe?: boolean | null;
   id?: string | null;
@@ -172,7 +172,7 @@ interface WAMessageKey {
   name?: string;
 }
 
-interface WAExtendedTextMessage {
+export interface WAExtendedTextMessage {
   /** ExtendedTextMessage text */
   text?: string | null;
 
@@ -201,7 +201,7 @@ interface WAExtendedTextMessage {
   contextInfo?: WAContextInfo | null;
 }
 
-interface WAContextInfo {
+export interface WAContextInfo {
   /** ContextInfo stanzaId */
   stanzaId?: string | null;
 
@@ -239,20 +239,20 @@ interface WAContextInfo {
   expiration?: number | null;
 }
 
-interface WAProtocolMessage {
+export interface WAProtocolMessage {
   key?: WAMessageKey | null;
   type?: "REVOKE" | "EPHEMERAL_SETTING" | null;
   ephemeralExpiration?: number | null;
 }
 
-interface WALocationMessage {
+export interface WALocationMessage {
   degreesLatitude: number;
   degreesLongitude: number;
   jpegThumbnail?: string;
   contextInfo?: WAContextInfo;
 }
 
-interface WAMessage {
+export interface WAMessage {
   conversation?: string | null;
   extendedTextMessage?: WAExtendedTextMessage | null;
   decryptedMediaMessage?: WADecryptedMedia;
@@ -266,7 +266,7 @@ interface WAMessage {
   locationMessage?: WALocationMessage | null;
 }
 
-interface WAWebMessage {
+export interface WAWebMessage {
   key: WAMessageKey;
   message: WAMessage;
   messageTimestamp?: number | Long | null;
@@ -280,7 +280,13 @@ interface WAWebMessage {
     | null;
   participant?: string | null;
   author?: string;
-  messageStubType?:
+}
+
+export interface WAStubMessage {
+  key: WAMessageKey;
+  messageTimestamp: number | Long;
+  participant?: string | null;
+  messageStubType:
     | "UNKNOWN"
     | "REVOKE"
     | "CIPHERTEXT"
@@ -354,10 +360,10 @@ interface WAWebMessage {
     | "GROUP_V4_ADD_INVITE_SENT"
     | "GROUP_PARTICIPANT_ADD_REQUEST_JOIN"
     | null;
-  messageStubParameters?: string[] | null;
+  messageStubParameters: string[] | null;
 }
 
-interface WASendMedia extends WAMedia {
+export interface WASendMedia extends WAMedia {
   id: string;
   nextId: string;
   msgType: string;
@@ -389,6 +395,7 @@ export default class WhatsApp {
     msg: WAWebMessage,
     description: string
   ) => void)[] = [];
+  private messageStubListeners: ((msg: WAStubMessage) => void)[] = [];
   private eventListeners: {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
@@ -412,12 +419,21 @@ export default class WhatsApp {
   }
 
   public on(
-    event: "message" | "ready",
-    cb: (() => void) | ((msg: WAWebMessage, description: string) => void)
+    event: "message" | "ready" | "stubMessage",
+    cb:
+      | (() => void)
+      | ((msg: WAWebMessage, description: string) => void)
+      | ((msg: WAStubMessage) => void)
   ) {
     switch (event) {
       case "message":
-        this.messageListeners.push(cb);
+        this.messageListeners.push(cb as ((
+          msg: WAWebMessage,
+          description: string
+        ) => void));
+        break;
+      case "stubMessage":
+        this.messageStubListeners.push(cb as ((msg: WAStubMessage) => void));
         break;
       case "ready":
         this.readyListener = cb as () => void;
@@ -662,6 +678,10 @@ export default class WhatsApp {
         }
 
         this.messageListeners.forEach(func => func(msg, allMsgs.description));
+      } else if (((node as unknown) as WAStubMessage).messageStubType) {
+        this.messageStubListeners.forEach(func =>
+          func((node as unknown) as WAStubMessage)
+        );
       }
     });
   }
