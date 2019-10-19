@@ -365,9 +365,7 @@ export interface WAStubMessage {
 
 export interface WASendMedia extends WAMedia {
   id: string;
-  nextId: string;
   msgType: string;
-  remoteJid: string;
   blob: Buffer;
 }
 
@@ -744,29 +742,99 @@ export default class WhatsApp {
     );
   }
 
+  private async sendQuotedMessage(
+    content: WAMessage,
+    remoteJid: string,
+    quotedAuthorJid: string,
+    quotedMsg: WAMessage,
+    quotedMsgId: string
+  ) {
+    const contextInfo = {
+      stanzaId: quotedMsgId,
+      participant: quotedAuthorJid,
+      quotedMessage: quotedMsg.extendedTextMessage
+        ? {
+            conversation: quotedMsg.extendedTextMessage.text
+          }
+        : quotedMsg
+    };
+
+    if (content.conversation) {
+      return await this.sendMessage(
+        {
+          extendedTextMessage: {
+            contextInfo,
+            text: content.conversation
+          }
+        },
+        remoteJid
+      );
+    } else {
+      const quotingContent = Object.assign({}, content);
+      const innerContent = Object.keys(quotingContent)
+        .map(_key => {
+          const key: keyof typeof quotingContent = _key as any;
+          return key !== "decryptedMediaMessage" && key !== "conversation"
+            ? { key, content: quotingContent[key] }
+            : undefined;
+        })
+        .filter(obj => obj !== undefined)[0]!;
+
+      return await this.sendMessage(
+        {
+          [innerContent.key]: {
+            contextInfo,
+            ...innerContent.content
+          }
+        },
+        remoteJid
+      );
+    }
+  }
+
+  public async sendQuotedMediaMessage(
+    file: Buffer,
+    mimetype: string,
+    msgType: "image" | "sticker" | "video" | "audio" | "document",
+    remoteJid: string,
+    quotedAuthorJid: string,
+    quotedMsg: WAMessage,
+    quotedMsgId: string,
+    caption: string | undefined = undefined,
+    duration: number | undefined = undefined,
+    isGif: boolean = false
+  ): Promise<{ id: string; content: WAMessage }> {
+    const media = await this.encryptMedia(
+      file,
+      mimetype,
+      msgType,
+      caption,
+      duration,
+      isGif
+    );
+
+    return await this.sendQuotedMessage(
+      media,
+      remoteJid,
+      quotedAuthorJid,
+      quotedMsg,
+      quotedMsgId
+    );
+  }
+
   public async sendQuotedTextMessage(
     text: string,
     remoteJid: string,
-    quotedJid: string,
+    quotedAuthorJid: string,
     quotedMsg: WAMessage,
-    quotedId: string
+    quotedMsgId: string
   ) {
-    return await this.sendMessage(
-      {
-        extendedTextMessage: {
-          text,
-          contextInfo: {
-            stanzaId: quotedId,
-            participant: quotedJid,
-            quotedMessage: quotedMsg.extendedTextMessage
-              ? {
-                  conversation: quotedMsg.extendedTextMessage.text
-                }
-              : quotedMsg
-          }
-        }
-      },
-      remoteJid
+    return await this.sendQuotedMessage(
+      { conversation: text },
+      remoteJid,
+      quotedAuthorJid,
+      quotedMsg,
+      quotedMsgId
     );
   }
 
@@ -789,41 +857,32 @@ export default class WhatsApp {
     })
       .then(res => res.json())
       .then(async (res: WhatsAppMediaUploadPayload) => {
-        const media = await this.sendMediaProto(
-          {
-            url: res.url,
-            mimetype: file.mimetype,
-            mediaKey: file.mediaKey,
-            fileLength: file.fileLength,
-            fileSha256: file.fileSha256,
-            fileEncSha256: file.fileEncSha256,
-            jpegThumbnail: file.jpegThumbnail,
-            pngThumbnail: file.pngThumbnail,
-            seconds: file.seconds,
-            caption: file.caption,
-            gifPlayback: file.gifPlayback
-          },
-          file.msgType,
-          file.remoteJid,
-          file.nextId
-        );
-
-        return media;
+        return {
+          url: res.url,
+          mimetype: file.mimetype,
+          mediaKey: file.mediaKey,
+          fileLength: file.fileLength,
+          fileSha256: file.fileSha256,
+          fileEncSha256: file.fileEncSha256,
+          jpegThumbnail: file.jpegThumbnail,
+          pngThumbnail: file.pngThumbnail,
+          seconds: file.seconds,
+          caption: file.caption,
+          gifPlayback: file.gifPlayback
+        };
       });
   }
 
-  public async sendMediaMessage(
+  private async encryptMedia(
     file: Buffer,
     mimetype: string,
     msgType: "image" | "sticker" | "video" | "audio" | "document",
-    remoteJid: string,
     caption: string | undefined = undefined,
     duration: number | undefined = undefined,
     isGif: boolean = false
-  ): Promise<{ id: string; content: WAMessage }> {
+  ): Promise<WAMessage> {
     return new Promise(async resolve => {
       const messageTag = randHex(12).toUpperCase();
-      const nextId = randHex(12).toUpperCase();
       const mediaKey = Uint8Array.from(crypto.randomBytes(32));
       const mediaKeyExpanded = HKDF(mediaKey, 112, WAMediaAppInfo[msgType]);
       const iv = mediaKeyExpanded.slice(0, 16);
@@ -845,13 +904,11 @@ export default class WhatsApp {
       );
 
       const mediaObj: WASendMedia = {
-        nextId,
         msgType,
         caption,
         mimetype,
         url: "",
         mediaKey,
-        remoteJid,
         fileSha256,
         fileEncSha256,
         id: messageTag,
@@ -881,9 +938,9 @@ export default class WhatsApp {
 
       this.addEventListener(async e => {
         if (typeof e.data === "string") {
-          const recievedMessageId = e.data.substring(0, e.data.indexOf(","));
+          const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
 
-          if (recievedMessageId === messageTag) {
+          if (receivedMessageId === messageTag) {
             const data = JSON.parse(
               e.data.substring(e.data.indexOf(",") + 1)
             ) as WhatsAppUploadMediaURL;
@@ -891,11 +948,46 @@ export default class WhatsApp {
 
             delete this.eventListeners[messageTag];
 
-            resolve({ id: mediaObj.nextId, content: media.content });
+            resolve({ [msgType + "Message"]: media });
           }
         }
       }, messageTag);
     });
+  }
+
+  public async sendMediaMessage(
+    file: Buffer,
+    mimetype: string,
+    msgType: "image" | "sticker" | "video" | "audio" | "document",
+    remoteJid: string,
+    caption: string | undefined = undefined,
+    duration: number | undefined = undefined,
+    isGif: boolean = false
+  ): Promise<{ id: string; content: WAMessage }> {
+    const nextId = randHex(12).toUpperCase();
+    const mediaProto = await this.encryptMedia(
+      file,
+      mimetype,
+      msgType,
+      caption,
+      duration,
+      isGif
+    );
+    const media = await this.sendMediaProto(
+      (mediaProto[
+        (msgType + "Message") as
+          | "imageMessage"
+          | "stickerMessage"
+          | "videoMessage"
+          | "audioMessage"
+          | "documentMessage"
+      ]! as unknown) as WAMedia,
+      msgType,
+      remoteJid,
+      nextId
+    );
+
+    return { id: nextId, content: media.content };
   }
 
   public async sendVCardContact(remoteJid: string, vcard: string) {
