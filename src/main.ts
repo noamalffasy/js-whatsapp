@@ -417,7 +417,7 @@ export default class WhatsApp {
   private eventListeners: {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
-  private readyListener: () => void = () => {};
+  private readyListener?: () => void = () => {};
   private qrCodeListener: () => void = () => {};
 
   constructor(
@@ -593,9 +593,6 @@ export default class WhatsApp {
             if (this.keysPath) {
               this.saveKeys();
             }
-
-            this.readyListener();
-            this.readyListener = () => {};
           } else if (
             Array.isArray(data) &&
             data.length >= 2 &&
@@ -615,9 +612,6 @@ export default class WhatsApp {
             if (this.keysPath) {
               this.saveKeys();
             }
-
-            this.readyListener();
-            this.readyListener = () => {};
           } else if (
             Array.isArray(data) &&
             data.length >= 2 &&
@@ -662,6 +656,11 @@ export default class WhatsApp {
 
     const data = AESDecrypt(this.encKey, messageContent.slice(32));
     const allMsgs = await whatsappReadBinary(data, true);
+
+    if (allMsgs.description === "action" && this.readyListener) {
+      this.readyListener();
+      this.readyListener = undefined;
+    }
 
     (allMsgs.content as WANode[]).forEach(async node => {
       if (
