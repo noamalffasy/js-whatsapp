@@ -1,4 +1,4 @@
-import { writeFile, readFile } from "fs";
+import { writeFile, readFile, exists as pathExists } from "fs";
 import { resolve as resolvePath } from "path";
 
 import sharp from "sharp";
@@ -9,6 +9,7 @@ import crypto from "crypto";
 import qrcode from "qrcode";
 import { generateKeyPair, sharedKey } from "curve25519-js";
 
+import { doesFileExist } from "./utils/path";
 import {
   dataUrlToBuffer,
   HmacSha256,
@@ -385,8 +386,12 @@ export interface WASendMedia extends WAMedia {
 
 export default class WhatsApp {
   private apiSocket: WebSocket;
+
+  private keysPath?: string;
+  private qrPath: string;
   private clientId?: string;
   private loginMsgId: string;
+
   public myWid?: string;
 
   private messageSentCount = 0;
@@ -414,7 +419,11 @@ export default class WhatsApp {
   } = {};
   private readyListener: () => void = () => {};
 
-  constructor(restoreSession = false) {
+  constructor(
+    qrPath = "./qrcode.png",
+    restoreSession = false,
+    keysPath = "./keys.json"
+  ) {
     const loginMsgId = "" + Date.now();
 
     this.apiSocket = new WebSocket("wss://web.whatsapp.com/ws", {
@@ -423,10 +432,22 @@ export default class WhatsApp {
 
     this.keyPair = null;
 
+    this.qrPath = resolvePath(".", qrPath);
+
+    if (restoreSession) {
+      this.keysPath = resolvePath(".", keysPath);
+    }
+
     this.apiSocket.onopen = this.init(loginMsgId, restoreSession);
     this.loginMsgId = loginMsgId;
 
-    if (!restoreSession) {
+    if (restoreSession) {
+      doesFileExist(this.keysPath!).then(doesExist => {
+        if (!doesExist) {
+          this.apiSocket.onmessage = this.onMessage(loginMsgId);
+        }
+      });
+    } else {
       this.apiSocket.onmessage = this.onMessage(loginMsgId);
     }
   }
@@ -463,9 +484,9 @@ export default class WhatsApp {
     this.eventListeners[id] = cb;
   }
 
-  private saveKeys(pathname: string) {
+  private saveKeys() {
     writeFile(
-      pathname,
+      this.keysPath!,
       JSON.stringify({
         clientId: this.clientId,
         clientToken: this.clientToken,
@@ -477,9 +498,9 @@ export default class WhatsApp {
     );
   }
 
-  private async getKeys(pathname: string) {
+  private async getKeys() {
     return new Promise((resolve, reject) => {
-      readFile(pathname, "utf-8", (err, data) => {
+      readFile(this.keysPath!, "utf-8", (err, data) => {
         if (err) reject(err);
 
         const {
@@ -565,7 +586,11 @@ export default class WhatsApp {
             this.myWid = (data as WhatsAppConnPayload)[1].wid;
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
-            this.saveKeys(resolvePath(".", "keys.json"));
+
+            if (this.keysPath) {
+              this.saveKeys();
+            }
+
             this.readyListener();
             this.readyListener = () => {};
           } else if (
@@ -583,7 +608,11 @@ export default class WhatsApp {
             this.myWid = (data as WhatsAppConnPayload)[1].wid;
 
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
-            this.saveKeys(resolvePath(".", "keys.json"));
+
+            if (this.keysPath) {
+              this.saveKeys();
+            }
+
             this.readyListener();
             this.readyListener = () => {};
           } else if (
@@ -1309,17 +1338,20 @@ export default class WhatsApp {
       await qrcode.toDataURL(`${data.ref},${publicKeyBase64},${this.clientId}`)
     );
 
-    writeFile(resolvePath(".", `qrcode.${qrCode.type}`), qrCode.data, err => {
+    writeFile(this.qrPath, qrCode.data, err => {
       console.error(err);
     });
   }
 
   private init(loginMsgId: string, restoreSession: boolean) {
     return async (e: WebSocket.OpenEvent) => {
-      if (!restoreSession) {
+      if (
+        !restoreSession ||
+        (restoreSession && !(await doesFileExist(this.keysPath!)))
+      ) {
         this.clientId = crypto.randomBytes(16).toString("base64");
       } else {
-        await this.getKeys(resolvePath(".", "keys.json"));
+        await this.getKeys();
       }
 
       e.target.send(
