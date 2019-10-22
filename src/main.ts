@@ -418,6 +418,7 @@ export default class WhatsApp {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
   private readyListener: () => void = () => {};
+  private qrCodeListener: () => void = () => {};
 
   constructor(
     qrPath = "./qrcode.png",
@@ -453,7 +454,7 @@ export default class WhatsApp {
   }
 
   public on(
-    event: "message" | "ready" | "stubMessage",
+    event: "message" | "ready" | "stubMessage" | "qrCode",
     cb:
       | (() => void)
       | ((msg: WAWebMessage, description: string) => void)
@@ -472,6 +473,8 @@ export default class WhatsApp {
       case "ready":
         this.readyListener = cb as () => void;
         break;
+      case "qrCode":
+        this.qrCodeListener = cb as () => void;
       default:
         break;
     }
@@ -1339,7 +1342,8 @@ export default class WhatsApp {
     );
 
     writeFile(this.qrPath, qrCode.data, err => {
-      console.error(err);
+      if (err) console.error(err);
+      this.qrCodeListener();
     });
   }
 
@@ -1358,7 +1362,7 @@ export default class WhatsApp {
         `${loginMsgId},["admin","init",[0,3,5149],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
       );
 
-      if (restoreSession) {
+      if (restoreSession && (await doesFileExist(this.keysPath!))) {
         this.restoreSession();
       }
     };
