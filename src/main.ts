@@ -120,6 +120,7 @@ export interface WAChat {
   modify_tag: string;
   name: string;
   spam: string;
+  read_only: string;
   t: string;
 }
 
@@ -811,15 +812,29 @@ export default class WhatsApp {
     return { id, content };
   }
 
-  public async getGroupParticipants(remoteJid: string) {
+  private async getGroupMetadata(remoteJid: string) {
     const id = randHex(10).toUpperCase();
 
     return await this.sendSocketAsync(
       id,
       `${id},,["query","GroupMetadata","${remoteJid}"]`
-    ).then((data: WhatsAppGroupMetadataPayload) => {
-      return data.participants;
-    });
+    );
+  }
+
+  public async getGroupParticipants(remoteJid: string) {
+    return await this.getGroupMetadata(remoteJid).then(
+      (data: WhatsAppGroupMetadataPayload) => {
+        return data.participants;
+      }
+    );
+  }
+
+  public async getGroupSubject(remoteJid: string) {
+    return await this.getGroupMetadata(remoteJid).then(
+      (data: WhatsAppGroupMetadataPayload) => {
+        return data.subject;
+      }
+    );
   }
 
   public async setGroupPhoto(image: Buffer, remoteJid: string) {
