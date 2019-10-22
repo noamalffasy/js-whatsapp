@@ -120,7 +120,7 @@ export interface WAChat {
   modify_tag: string;
   name: string;
   spam: string;
-  read_only: string;
+  read_only?: string;
   t: string;
 }
 
@@ -683,34 +683,34 @@ export default class WhatsApp {
 
         if (msg.participant) {
           const userJid = msg.participant.replace("@s.whatsapp.net", "@c.us");
-          const contact = this.contactList.filter(
-            contact =>
-              contact.jid.replace("\0", "").substring(0, 11) ===
-              userJid.substring(0, 11)
-          )[0];
+          const contact = this.contactList.find(
+            contact => contact.jid.replace("\0", "") === userJid
+          );
 
           if (contact) {
-            msg.author = contact.name ? contact.name : contact.notify;
+            msg.author = contact.name
+              ? contact.name
+              : contact.vname || contact.notify;
           }
         } else {
           const userJid = msg.key.remoteJid!.replace(
             "@s.whatsapp.net",
             "@c.us"
           );
-          const contact = this.contactList.filter(
-            contact =>
-              contact.jid.replace("\0", "").substring(0, 11) ===
-              userJid.substring(0, 11)
-          )[0];
+          const contact = this.contactList.find(
+            contact => contact.jid.replace("\0", "") === userJid
+          );
 
           if (contact) {
-            msg.author = contact.name ? contact.name : contact.notify;
+            msg.author = contact.name
+              ? contact.name
+              : contact.vname || contact.notify;
           }
         }
 
-        const chat = this.chatList.filter(
+        const chat = this.chatList.find(
           chat => chat.jid.replace("\0", "") === remoteJid
-        )[0];
+        );
 
         if (chat) {
           msg.key.name = chat.name;
