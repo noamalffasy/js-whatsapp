@@ -79,7 +79,7 @@ export class WABinaryReader {
         this.unpackByte(tag, currByte & 0x0f)!;
     }
 
-    if (startByte >> 7 === 0) {
+    if (startByte >> 7 !== 0) {
       ret = ret.substr(0, ret.length - 1);
     }
 
