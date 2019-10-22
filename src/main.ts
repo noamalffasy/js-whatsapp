@@ -98,6 +98,20 @@ export interface WhatsAppMediaUploadPayload {
   url: string;
 }
 
+export interface WhatsAppGroupMetadataPayload {
+  id: string;
+  owner: string;
+  subject: string;
+  creation: number;
+  participants: {
+    id: string;
+    isAdmin: boolean;
+    isSuperAdmin: boolean;
+  }[];
+  subjectTime: number;
+  subjectOwner: string;
+}
+
 export interface WAChat {
   count: string;
   jid: string;
@@ -373,6 +387,7 @@ export default class WhatsApp {
   private apiSocket: WebSocket;
   private clientId?: string;
   private loginMsgId: string;
+  public myWid?: string;
 
   private messageSentCount = 0;
 
@@ -504,6 +519,25 @@ export default class WhatsApp {
     this.apiSocket.send(`goodbye,,["admin","Conn","disconnect"]`);
   }
 
+  private async sendSocketAsync(messageTag: string, data: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.apiSocket.send(data);
+
+      this.addEventListener(async e => {
+        if (typeof e.data === "string") {
+          const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
+
+          if (receivedMessageId === messageTag && e.data !== `${messageTag},`) {
+            const data = JSON.parse(e.data.substring(e.data.indexOf(",") + 1));
+            delete this.eventListeners[messageTag];
+
+            resolve(data);
+          }
+        }
+      }, messageTag);
+    });
+  }
+
   private onMessage(loginMsgId: string) {
     return async (e: WebSocket.MessageEvent) => {
       Object.values(this.eventListeners).forEach(func => func(e));
@@ -528,6 +562,7 @@ export default class WhatsApp {
             data[0] === "Conn" &&
             data[1].secret
           ) {
+            this.myWid = (data as WhatsAppConnPayload)[1].wid;
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
             this.saveKeys(resolvePath(".", "keys.json"));
@@ -545,6 +580,7 @@ export default class WhatsApp {
             } = (data as WhatsAppConnPayload)[1];
             this.clientToken = clientToken;
             this.serverToken = serverToken;
+            this.myWid = (data as WhatsAppConnPayload)[1].wid;
 
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
             this.saveKeys(resolvePath(".", "keys.json"));
@@ -684,7 +720,32 @@ export default class WhatsApp {
     });
   }
 
-  public async sendMessage(
+  private async sendProto(
+    msgData: WAMessageNode,
+    id: string,
+    metric: keyof typeof WAMetrics = "MESSAGE"
+  ) {
+    const encoder = new TextEncoder();
+    const cipher = AESEncrypt(this.encKey, await whatsappWriteBinary(msgData));
+    const encryptedMsg = concatIntArray(
+      HmacSha256(this.macKey, cipher),
+      cipher
+    );
+    const payload = concatIntArray(
+      encoder.encode(id),
+      encoder.encode(","),
+      Uint8Array.from([WAMetrics[metric]]),
+      Uint8Array.from([WAFlags.IGNORE]),
+      encryptedMsg
+    );
+
+    this.messageSentCount++;
+    return await this.sendSocketAsync(id, payload).then(data => {
+      return data;
+    });
+  }
+
+  private async sendMessage(
     content: WAMessage,
     remoteJid: string,
     msgId?: string
@@ -697,7 +758,7 @@ export default class WhatsApp {
         fromMe: true
       },
       messageTimestamp: Math.round(Date.now() / 1000),
-      status: 0,
+      status: 1,
       message: content
     };
     const msgData: WAMessageNode = {
@@ -713,22 +774,53 @@ export default class WhatsApp {
         }
       ]
     };
-    const encoder = new TextEncoder();
-    const cipher = AESEncrypt(this.encKey, await whatsappWriteBinary(msgData));
-    const encryptedMsg = concatIntArray(
-      HmacSha256(this.macKey, cipher),
-      cipher
-    );
-    const payload = concatIntArray(
-      encoder.encode(id),
-      encoder.encode(","),
-      Uint8Array.from([WAMetrics.MESSAGE]),
-      Uint8Array.from([WAFlags.IGNORE]),
-      encryptedMsg
-    );
 
-    this.messageSentCount++;
-    this.apiSocket.send(payload);
+    await this.sendProto(msgData, id);
+
+    return { id, content };
+  }
+
+  public async getGroupParticipants(remoteJid: string) {
+    const id = randHex(10).toUpperCase();
+
+    return await this.sendSocketAsync(
+      id,
+      `${id},,["query","GroupMetadata","${remoteJid}"]`
+    ).then((data: WhatsAppGroupMetadataPayload) => {
+      return data.participants;
+    });
+  }
+
+  public async setGroupPhoto(image: Buffer, remoteJid: string) {
+    const id = `${Math.round(Date.now() / 1000)}.--${this.messageSentCount}`;
+    const content: WAMessageNode = {
+      description: "picture",
+      attributes: {
+        id,
+        jid: remoteJid,
+        type: "set"
+      },
+      content: [
+        {
+          description: "image",
+          content: Uint8Array.from(image)
+        },
+        {
+          description: "preview",
+          content: Uint8Array.from(image)
+        }
+      ]
+    };
+    const msgData: WAMessageNode = {
+      description: "action",
+      attributes: {
+        type: "set",
+        epoch: "" + this.messageSentCount
+      },
+      content: [content]
+    };
+
+    await this.sendProto(msgData, id, "PIC");
 
     return { id, content };
   }
@@ -967,12 +1059,6 @@ export default class WhatsApp {
           ? "image"
           : msgType.replace("Message", "");
 
-      this.apiSocket.send(
-        `${messageTag},["action", "encr_upload", "${type}", "${Buffer.from(
-          fileEncSha256
-        ).toString("base64")}"]`
-      );
-
       const mediaObj: WASendMedia = {
         msgType,
         caption,
@@ -1006,22 +1092,16 @@ export default class WhatsApp {
         mediaObj.gifPlayback = isGif;
       }
 
-      this.addEventListener(async e => {
-        if (typeof e.data === "string") {
-          const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
+      await this.sendSocketAsync(
+        messageTag,
+        `${messageTag},["action", "encr_upload", "${type}", "${Buffer.from(
+          fileEncSha256
+        ).toString("base64")}"]`
+      ).then(async (data: WhatsAppUploadMediaURL) => {
+        const media = await this.uploadMedia(data.url, mediaObj);
 
-          if (receivedMessageId === messageTag) {
-            const data = JSON.parse(
-              e.data.substring(e.data.indexOf(",") + 1)
-            ) as WhatsAppUploadMediaURL;
-            const media = await this.uploadMedia(data.url, mediaObj);
-
-            delete this.eventListeners[messageTag];
-
-            resolve({ [msgType + "Message"]: media });
-          }
-        }
-      }, messageTag);
+        resolve({ [msgType + "Message"]: media });
+      });
     });
   }
 
@@ -1172,31 +1252,22 @@ export default class WhatsApp {
   public async getProfilePicThumb(
     jid: string
   ): Promise<{ id: string; content?: Buffer; status?: number }> {
-    return new Promise(resolve => {
+    return new Promise(async resolve => {
       const msgId = randHex(12).toUpperCase();
-      this.apiSocket.send(`${msgId},["query", "ProfilePicThumb", "${jid}"]`);
 
-      this.addEventListener(async e => {
-        if (typeof e.data === "string") {
-          const recievedMessageId = e.data.substring(0, e.data.indexOf(","));
-
-          if (recievedMessageId === msgId) {
-            const data = JSON.parse(
-              e.data.substring(e.data.indexOf(",") + 1)
-            ) as WhatsAppProfilePicPayload;
-            delete this.eventListeners[msgId];
-
-            if (data.eurl) {
-              resolve({
-                id: msgId,
-                content: await fetch(data.eurl).then(res => res.buffer())
-              });
-            } else if (data.status) {
-              resolve({ id: msgId, status: data.status });
-            }
-          }
+      await this.sendSocketAsync(
+        msgId,
+        `${msgId},["query", "ProfilePicThumb", "${jid}"]`
+      ).then(async (data: WhatsAppProfilePicPayload) => {
+        if (data.eurl) {
+          resolve({
+            id: msgId,
+            content: await fetch(data.eurl).then(res => res.buffer())
+          });
+        } else if (data.status) {
+          resolve({ id: msgId, status: data.status });
         }
-      }, msgId);
+      });
     });
   }
 
@@ -1252,7 +1323,7 @@ export default class WhatsApp {
       }
 
       e.target.send(
-        `${loginMsgId},["admin","init",[0,3,2390],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
+        `${loginMsgId},["admin","init",[0,3,5149],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
       );
 
       if (restoreSession) {

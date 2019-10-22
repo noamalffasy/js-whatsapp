@@ -156,21 +156,21 @@ class WABinaryWriter {
     }
   }
 
-  writeChildren(children: string | Uint8Array | WAMessageNode[]) {
-    if (typeof children === "string") {
-      this.writeString(children as string, true);
-    } else if (children instanceof Uint8Array) {
-      this.writeByteLength(children.length);
-      this.pushBytes(Array.from(children as Uint8Array));
-    } else {
-      if (!Array.isArray(children)) {
+  writeChildren(children: string | Uint8Array | WAMessageNode[] | undefined) {
+    if (children) {
+      if (typeof children === "string") {
+        this.writeString(children as string, true);
+      } else if (children instanceof Uint8Array) {
+        this.writeByteLength(children.length);
+        this.pushBytes(Array.from(children as Uint8Array));
+      } else if (Array.isArray(children)) {
+        this.writeListStart((children as WAMessageNode[]).length);
+
+        for (const child of children) {
+          this.writeNode(child);
+        }
+      } else {
         throw new Error("Invalid children");
-      }
-
-      this.writeListStart((children as WAMessageNode[]).length);
-
-      for (const child of children) {
-        this.writeNode(child);
       }
     }
   }
@@ -254,7 +254,7 @@ class WABinaryWriter {
 export interface WAMessageNode {
   description: WANode["description"];
   attributes?: WANode["attributes"];
-  content: Uint8Array | WAMessageNode[];
+  content?: Uint8Array | WAMessageNode[];
 }
 
 export async function whatsappWriteBinary(node: WAMessageNode) {
