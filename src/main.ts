@@ -116,8 +116,8 @@ export interface WhatsAppGroupMetadataPayload {
 export interface WAChat {
   count: string;
   jid: string;
-  message: string;
-  modify_tag: string;
+  message?: string;
+  modify_tag?: string;
   name: string;
   spam: string;
   read_only?: string;
@@ -745,9 +745,49 @@ export default class WhatsApp {
 
         this.messageListeners.forEach(func => func(msg, allMsgs.description));
       } else if (((node as unknown) as WAStubMessage).messageStubType) {
-        this.messageStubListeners.forEach(func =>
-          func((node as unknown) as WAStubMessage)
-        );
+        const msg = (node as unknown) as WAStubMessage;
+
+        if (
+          msg.messageStubType === "GROUP_PARTICIPANT_ADD" &&
+          msg.messageStubParameters!.includes(
+            this.myWid!.replace("c.us", "s.whatsapp.net")
+          )
+        ) {
+          const chat = this.chatList.find(
+            chat => chat.jid === msg.key.remoteJid!
+          );
+
+          if (chat) {
+            const i = this.chatList.indexOf(chat);
+
+            chat.read_only = "false";
+            this.chatList[i] = chat;
+          } else {
+            const chat = await this.getGroupMetadata(msg.key.remoteJid!);
+
+            this.chatList.push({
+              name: chat.subject,
+              jid: msg.key.remoteJid!,
+              spam: "false",
+              count: "0",
+              t: "" + chat.creation
+            });
+          }
+        } else if (
+          msg.messageStubType === "GROUP_PARTICIPANT_REMOVE" &&
+          msg.messageStubParameters!.includes(
+            this.myWid!.replace("c.us", "s.whatsapp.net")
+          )
+        ) {
+          const chat = this.chatList.find(
+            chat => chat.jid === msg.key.remoteJid!
+          );
+
+          if (chat) {
+            this.chatList.splice(this.chatList.indexOf(chat), 1);
+          }
+        }
+        this.messageStubListeners.forEach(func => func(msg));
       }
     });
   }
@@ -812,7 +852,9 @@ export default class WhatsApp {
     return { id, content };
   }
 
-  private async getGroupMetadata(remoteJid: string) {
+  private async getGroupMetadata(
+    remoteJid: string
+  ): Promise<WhatsAppGroupMetadataPayload> {
     const id = randHex(10).toUpperCase();
 
     return await this.sendSocketAsync(
