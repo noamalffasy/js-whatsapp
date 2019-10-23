@@ -913,13 +913,31 @@ export default class WhatsApp {
     return { id, content };
   }
 
-  public async sendTextMessage(text: string, remoteJid: string) {
-    return await this.sendMessage(
-      {
-        conversation: text
-      },
-      remoteJid
-    );
+  public async sendTextMessage(
+    text: string,
+    remoteJid: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
+  ) {
+    if (!mentionedJid) {
+      return await this.sendMessage(
+        {
+          conversation: text
+        },
+        remoteJid
+      );
+    } else {
+      return await this.sendMessage(
+        {
+          extendedTextMessage: {
+            contextInfo: {
+              mentionedJid
+            },
+            text
+          }
+        },
+        remoteJid
+      );
+    }
   }
 
   private async sendQuotedMessage(
@@ -927,9 +945,21 @@ export default class WhatsApp {
     remoteJid: string,
     quotedAuthorJid: string,
     quotedMsg: WAMessage,
-    quotedMsgId: string
+    quotedMsgId: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ) {
     const contextInfo = {
+      mentionedJid: mentionedJid
+        ? quotedMsg.extendedTextMessage
+          ? quotedMsg.extendedTextMessage.contextInfo
+            ? quotedMsg.extendedTextMessage.contextInfo.mentionedJid
+              ? quotedMsg.extendedTextMessage.contextInfo.mentionedJid.concat(
+                  mentionedJid
+                )
+              : mentionedJid
+            : mentionedJid
+          : mentionedJid
+        : [],
       stanzaId: quotedMsgId,
       participant: quotedAuthorJid,
       quotedMessage: quotedMsg.extendedTextMessage
@@ -977,14 +1007,16 @@ export default class WhatsApp {
     remoteJid: string,
     quotedAuthorJid: string,
     quotedMsg: WAMessage,
-    quotedMsgId: string
+    quotedMsgId: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ) {
     return await this.sendQuotedMessage(
       { conversation: text },
       remoteJid,
       quotedAuthorJid,
       quotedMsg,
-      quotedMsgId
+      quotedMsgId,
+      mentionedJid
     );
   }
 
@@ -998,7 +1030,8 @@ export default class WhatsApp {
     quotedMsgId: string,
     caption: string | undefined = undefined,
     duration: number | undefined = undefined,
-    isGif: boolean = false
+    isGif: boolean = false,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ): Promise<{ id: string; content: WAMessage }> {
     const media = await this.encryptMedia(
       file,
@@ -1014,7 +1047,8 @@ export default class WhatsApp {
       remoteJid,
       quotedAuthorJid,
       quotedMsg,
-      quotedMsgId
+      quotedMsgId,
+      mentionedJid
     );
   }
 
@@ -1023,7 +1057,8 @@ export default class WhatsApp {
     remoteJid: string,
     quotedAuthorJid: string,
     quotedMsg: WAMessage,
-    quotedMsgId: string
+    quotedMsgId: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ) {
     const fullName = vcard.slice(
       vcard.indexOf("FN:") + 3,
@@ -1040,7 +1075,8 @@ export default class WhatsApp {
       remoteJid,
       quotedAuthorJid,
       quotedMsg,
-      quotedMsgId
+      quotedMsgId,
+      mentionedJid
     );
   }
 
@@ -1051,7 +1087,8 @@ export default class WhatsApp {
     remoteJid: string,
     quotedAuthorJid: string,
     quotedMsg: WAMessage,
-    quotedMsgId: string
+    quotedMsgId: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ) {
     const fullName =
       lastName.length > 0 ? `${firstName} ${lastName}` : firstName;
@@ -1062,7 +1099,8 @@ export default class WhatsApp {
       remoteJid,
       quotedAuthorJid,
       quotedMsg,
-      quotedMsgId
+      quotedMsgId,
+      mentionedJid
     );
   }
 
@@ -1072,7 +1110,8 @@ export default class WhatsApp {
     remoteJid: string,
     quotedAuthorJid: string,
     quotedMsg: WAMessage,
-    quotedMsgId: string
+    quotedMsgId: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ) {
     return await this.sendQuotedMessage(
       {
@@ -1084,7 +1123,8 @@ export default class WhatsApp {
       remoteJid,
       quotedAuthorJid,
       quotedMsg,
-      quotedMsgId
+      quotedMsgId,
+      mentionedJid
     );
   }
 
@@ -1200,7 +1240,8 @@ export default class WhatsApp {
     remoteJid: string,
     caption: string | undefined = undefined,
     duration: number | undefined = undefined,
-    isGif: boolean = false
+    isGif: boolean = false,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ): Promise<{ id: string; content: WAMessage }> {
     const nextId = randHex(12).toUpperCase();
     const mediaProto = await this.encryptMedia(
@@ -1222,7 +1263,8 @@ export default class WhatsApp {
       ]! as unknown) as WAMedia,
       msgType,
       remoteJid,
-      nextId
+      nextId,
+      mentionedJid
     );
 
     return { id: nextId, content: media.content };
@@ -1278,15 +1320,31 @@ export default class WhatsApp {
     mediaFile: WAMedia,
     msgType: string,
     remoteJid: string,
-    msgId: string
+    msgId: string,
+    mentionedJid?: WAContextInfo["mentionedJid"]
   ) {
-    return await this.sendMessage(
-      {
-        [msgType + "Message"]: mediaFile
-      },
-      remoteJid,
-      msgId
-    );
+    if (!mentionedJid) {
+      return await this.sendMessage(
+        {
+          [msgType + "Message"]: mediaFile
+        },
+        remoteJid,
+        msgId
+      );
+    } else {
+      return await this.sendMessage(
+        {
+          [msgType + "Message"]: {
+            ...mediaFile,
+            contextInfo: {
+              mentionedJid
+            }
+          }
+        },
+        remoteJid,
+        msgId
+      );
+    }
   }
 
   private async decryptMedia(
