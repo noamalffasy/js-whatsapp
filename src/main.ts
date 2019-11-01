@@ -113,6 +113,11 @@ export interface WhatsAppGroupMetadataPayload {
   subjectOwner: string;
 }
 
+export interface WhatsAppAdminTestPayload {
+  0: "Pong";
+  1: true;
+}
+
 export interface WAChat {
   count: string;
   jid: string;
@@ -410,16 +415,20 @@ export default class WhatsApp {
   chatList: WAChat[] = [];
   contactList: WAContact[] = [];
 
+  isLoggedIn: boolean = false;
+
   private messageListeners: ((
     msg: WAWebMessage,
     description: string
   ) => void)[] = [];
   private messageStubListeners: ((msg: WAStubMessage) => void)[] = [];
+  private noNetworkListeners: (() => void)[] = [];
+  private loggedOutListeners: (() => void)[] = [];
   private eventListeners: {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
-  private readyListener?: () => void = () => {};
-  private qrCodeListener: () => void = () => {};
+  private readyListeners: (() => void)[] = [];
+  private qrCodeListeners: (() => void)[] = [];
 
   constructor(
     qrPath = "./qrcode.png",
@@ -455,7 +464,13 @@ export default class WhatsApp {
   }
 
   public on(
-    event: "message" | "ready" | "stubMessage" | "qrCode",
+    event:
+      | "message"
+      | "ready"
+      | "stubMessage"
+      | "qrCode"
+      | "noNetwork"
+      | "loggedOut",
     cb:
       | (() => void)
       | ((msg: WAWebMessage, description: string) => void)
@@ -472,10 +487,14 @@ export default class WhatsApp {
         this.messageStubListeners.push(cb as ((msg: WAStubMessage) => void));
         break;
       case "ready":
-        this.readyListener = cb as () => void;
+        this.readyListeners.push(cb as () => void);
         break;
       case "qrCode":
-        this.qrCodeListener = cb as () => void;
+        this.qrCodeListeners.push(cb as () => void);
+      case "noNetwork":
+        this.noNetworkListeners.push(cb as () => void);
+      case "loggedOut":
+        this.loggedOutListeners.push(cb as () => void);
       default:
         break;
     }
@@ -526,11 +545,28 @@ export default class WhatsApp {
     });
   }
 
-  private async restoreSession() {
+  private async restoreSession(loginMsgId: string) {
     this.apiSocket.send(
-      `${this.loginMsgId},["admin","login","${this.clientToken}","${this.serverToken}","${this.clientId}","takeover"]`
+      `${loginMsgId},["admin","login","${this.clientToken}","${this.serverToken}","${this.clientId}","takeover"]`
     );
-    this.apiSocket.onmessage = this.onMessage(this.loginMsgId);
+
+    this.apiSocket.onmessage = e => {
+      if (typeof e.data === "string") {
+        const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
+
+        if (receivedMessageId === loginMsgId && e.data !== `${loginMsgId},`) {
+          const data = JSON.parse(
+            e.data.substring(e.data.indexOf(",") + 1)
+          ) as { status: number };
+
+          if (data.status === 200) {
+            this.apiSocket.onmessage = this.onMessage(loginMsgId);
+          } else {
+            this.loggedOutListeners.forEach(func => func());
+          }
+        }
+      }
+    };
   }
 
   private keepAlive() {
@@ -587,6 +623,7 @@ export default class WhatsApp {
             data[0] === "Conn" &&
             data[1].secret
           ) {
+            this.isLoggedIn = true;
             this.myWid = (data as WhatsAppConnPayload)[1].wid;
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
@@ -604,6 +641,7 @@ export default class WhatsApp {
               clientToken,
               serverToken
             } = (data as WhatsAppConnPayload)[1];
+            this.isLoggedIn = true;
             this.clientToken = clientToken;
             this.serverToken = serverToken;
             this.myWid = (data as WhatsAppConnPayload)[1].wid;
@@ -620,15 +658,12 @@ export default class WhatsApp {
             data[1].type === "challenge"
           ) {
             const str = data[1].challenge;
-            const decoded = Buffer.from(str, "base64").toString("ascii");
-            const signed = HmacSha256(
-              new TextEncoder().encode(decoded),
-              this.macKey
-            );
+            const decoded = Buffer.from(str, "base64");
+            const signed = HmacSha256(this.macKey, Uint8Array.from(decoded));
             const encoded = Buffer.from(signed).toString("base64");
 
             this.apiSocket.send(
-              `${messageTag}, ["admin", "challenge", "${encoded}", "${this.serverToken}", "${this.clientToken}"]`
+              `${messageTag}, ["admin", "challenge", "${encoded}", "${this.serverToken}", "${this.clientId}"]`
             );
           } else if (
             (data as WhatsAppLoginPayload).status &&
@@ -658,9 +693,9 @@ export default class WhatsApp {
     const data = AESDecrypt(this.encKey, messageContent.slice(32));
     const allMsgs = await whatsappReadBinary(data, true);
 
-    if (allMsgs.description === "action" && this.readyListener) {
-      this.readyListener();
-      this.readyListener = undefined;
+    if (allMsgs.description === "action") {
+      this.readyListeners.forEach(func => func());
+      this.readyListeners = [];
     }
 
     (allMsgs.content as WANode[]).forEach(async node => {
@@ -720,27 +755,37 @@ export default class WhatsApp {
           msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.stickerMessage as WAReceiveMedia,
             "sticker"
-          );
+          ).catch(err => {
+            throw err;
+          });
         } else if (msg.message.imageMessage) {
           msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.imageMessage as WAReceiveMedia,
             "image"
-          );
+          ).catch(err => {
+            throw err;
+          });
         } else if (msg.message.videoMessage) {
           msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.videoMessage as WAReceiveMedia,
             "video"
-          );
+          ).catch(err => {
+            throw err;
+          });
         } else if (msg.message.audioMessage) {
           msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.audioMessage as WAReceiveMedia,
             "audio"
-          );
+          ).catch(err => {
+            throw err;
+          });
         } else if (msg.message.documentMessage) {
           msg.message.decryptedMediaMessage = await this.decryptMedia(
             msg.message.documentMessage as WAReceiveMedia,
             "document"
-          );
+          ).catch(err => {
+            throw err;
+          });
         }
 
         this.messageListeners.forEach(func => func(msg, allMsgs.description));
@@ -792,6 +837,23 @@ export default class WhatsApp {
     });
   }
 
+  private async sendAdminTest() {
+    const id = randHex(10).toUpperCase();
+    const timeout = setTimeout(() => {
+      this.noNetworkListeners.forEach(func => func());
+    }, 10 * 1000);
+
+    return await this.sendSocketAsync(id, ["admin", "test"]).then(
+      (data: WhatsAppAdminTestPayload) => {
+        if (data[0] === "Pong" && data[1]) {
+          clearTimeout(timeout);
+          return true;
+        }
+        return false;
+      }
+    );
+  }
+
   private async sendProto(
     msgData: WAMessageNode,
     id: string,
@@ -812,7 +874,15 @@ export default class WhatsApp {
     );
 
     this.messageSentCount++;
+
+    const timeout = setTimeout(async () => {
+      await this.sendAdminTest().then(async isLoggedIn => {
+        this.isLoggedIn = isLoggedIn;
+      });
+    }, 2 * 1000);
+
     return await this.sendSocketAsync(id, payload).then(data => {
+      clearTimeout(timeout);
       return data;
     });
   }
@@ -1457,7 +1527,7 @@ export default class WhatsApp {
 
     writeFile(this.qrPath, qrCode.data, err => {
       if (err) console.error(err);
-      this.qrCodeListener();
+      this.qrCodeListeners.forEach(func => func());
     });
   }
 
@@ -1477,7 +1547,7 @@ export default class WhatsApp {
       );
 
       if (restoreSession && (await doesFileExist(this.keysPath!))) {
-        this.restoreSession();
+        this.restoreSession(loginMsgId);
       }
     };
   }
