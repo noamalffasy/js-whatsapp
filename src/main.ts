@@ -1,9 +1,8 @@
-import { writeFile, readFile, exists as pathExists } from "fs";
+import { writeFile, readFile } from "fs";
 import { resolve as resolvePath } from "path";
 
 import sharp from "sharp";
 import fetch from "node-fetch";
-import FormData from "form-data";
 import WebSocket from "ws";
 import crypto from "crypto";
 import qrcode from "qrcode";
