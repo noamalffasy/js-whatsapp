@@ -1543,7 +1543,7 @@ export default class WhatsApp {
       }
 
       e.target.send(
-        `${loginMsgId},["admin","init",[0,3,5149],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
+        `${loginMsgId},["admin","init",[0,4,2080],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
       );
 
       if (restoreSession && (await doesFileExist(this.keysPath!))) {
