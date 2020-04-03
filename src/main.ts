@@ -91,11 +91,20 @@ export interface WhatsAppProfilePicPayload {
   tag: string;
 }
 
+export interface WhatsAppMediaConnPayload {
+  status: number;
+  media_conn: {
+    auth: string;
+    ttl: number;
+    hosts: {
+      hostname: string;
+      ips: string[];
+    }[];
+  };
+}
+
 export interface WhatsAppMediaUploadPayload {
-  filehash: string;
-  mimetype: string;
-  size: string;
-  type: "encrypted";
+  direct_path: string;
   url: string;
 }
 
@@ -119,6 +128,8 @@ export interface WhatsAppAdminTestPayload {
 }
 
 export interface WAChat {
+  id?: string | null;
+  displayName?: string | null;
   count: string;
   jid: string;
   message?: string;
@@ -215,11 +226,27 @@ export interface WAExtendedTextMessage {
   /** ExtendedTextMessage backgroundArgb */
   backgroundArgb?: number | null;
 
+  /** ExtendedTextMessage font */
+  font?:
+    | "SANS_SERIF"
+    | "SERIF"
+    | "NORICAN_REGULAR"
+    | "BRYDAN_WRITE"
+    | "BEBASNEUE_REGULAR"
+    | "OSWALD_HEAVY"
+    | null;
+
+  /** ExtendedTextMessage previewType */
+  previewType?: "NONE" | "VIDEO" | null;
+
   /** ExtendedTextMessage jpegThumbnail */
   jpegThumbnail?: Uint8Array | null;
 
   /** ExtendedTextMessage contextInfo */
   contextInfo?: WAContextInfo | null;
+
+  /** ExtendedTextMessage doNotPlayInline */
+  doNotPlayInline?: boolean | null;
 }
 
 export interface WAContextInfo {
@@ -258,17 +285,50 @@ export interface WAContextInfo {
 
   /** ContextInfo expiration */
   expiration?: number | null;
+
+  /** ContextInfo ephemeralSettingTimestamp */
+  ephemeralSettingTimestamp?: number | null;
 }
 
 export interface WAProtocolMessage {
   key?: WAMessageKey | null;
-  type?: "REVOKE" | "EPHEMERAL_SETTING" | null;
+  type?:
+    | "REVOKE"
+    | "EPHEMERAL_SETTING"
+    | "EPHEMERAL_SYNC_RESPONSE"
+    | "HISTORY_SYNC_NOTIFICATION"
+    | null;
   ephemeralExpiration?: number | null;
+  ephemeralSettingTimestamp?: number | null;
+  historySyncNotification?: WAHistorySyncNotification | null;
+}
+
+export interface WAHistorySyncNotification {
+  fileSha256?: Uint8Array | null;
+  fileLength?: number | null;
+  mediaKey?: Uint8Array | null;
+  fileEncSha256?: Uint8Array | null;
+  directPath?: string | null;
+  syncType?:
+    | "INITIAL_BOOTSTRAP"
+    | "INITIAL_STATUS_V3"
+    | "FULL"
+    | "RECENT"
+    | null;
+  chunkOrder: number;
 }
 
 export interface WALocationMessage {
   degreesLatitude: number;
   degreesLongitude: number;
+  name?: string;
+  address?: string;
+  url?: string;
+  isLive?: boolean;
+  accuracyInMeter?: number;
+  speedInMps?: number;
+  degreesClockwiseFromMagneticNorth?: number;
+  comment?: string;
   jpegThumbnail?: string;
   contextInfo?: WAContextInfo;
 }
@@ -285,6 +345,17 @@ export interface WAMessage {
   contactMessage?: WAContactMessage | null;
   protocolMessage?: WAProtocolMessage | null;
   locationMessage?: WALocationMessage | null;
+  groupInviteMessage?: WAGroupInviteMessage | null;
+}
+
+export interface WAGroupInviteMessage {
+  groupJid: string;
+  inviteCode: string;
+  inviteExpiration: number;
+  groupName: string;
+  jpegThumbnail: Uint8Array;
+  caption: string;
+  contextInfo: WAContextInfo;
 }
 
 export interface WAWebMessage {
@@ -380,14 +451,9 @@ export interface WAStubMessage {
     | "GROUP_CHANGE_NO_FREQUENTLY_FORWARDED"
     | "GROUP_V4_ADD_INVITE_SENT"
     | "GROUP_PARTICIPANT_ADD_REQUEST_JOIN"
+    | "CHANGE_EPHEMERAL_SETTING"
     | null;
   messageStubParameters: string[] | null;
-}
-
-export interface WASendMedia extends WAMedia {
-  id: string;
-  msgType: string;
-  blob: Buffer;
 }
 
 export default class WhatsApp {
@@ -478,13 +544,12 @@ export default class WhatsApp {
   ) {
     switch (event) {
       case "message":
-        this.messageListeners.push(cb as ((
-          msg: WAWebMessage,
-          description: string
-        ) => void));
+        this.messageListeners.push(
+          cb as (msg: WAWebMessage, description: string) => void
+        );
         break;
       case "stubMessage":
-        this.messageStubListeners.push(cb as ((msg: WAStubMessage) => void));
+        this.messageStubListeners.push(cb as (msg: WAStubMessage) => void);
         break;
       case "ready":
         this.readyListeners.push(cb as () => void);
@@ -881,10 +946,11 @@ export default class WhatsApp {
       });
     }, 2 * 1000);
 
-    return await this.sendSocketAsync(id, payload).then(data => {
-      clearTimeout(timeout);
-      return data;
-    });
+    return await this.sendSocketAsync(id, payload)
+      .then(data => {
+        clearTimeout(timeout);
+        return data;
+      })
   }
 
   private async sendMessage(
@@ -1198,39 +1264,39 @@ export default class WhatsApp {
     );
   }
 
-  private async uploadMedia(uploadUrl: string, file: WASendMedia) {
-    const body = new FormData();
-    body.append("hash", Buffer.from(file.fileEncSha256).toString("base64"));
-    body.append("file", file.blob, {
-      filename: "blob",
-      contentType: file.mimetype
-    });
-
-    return await fetch(`${uploadUrl}?f=j`, {
+  private async uploadMedia(uploadUrl: string, body: Uint8Array) {
+    return await fetch(uploadUrl, {
       body,
       method: "POST",
       headers: {
-        ...body.getHeaders(),
         Origin: "https://web.whatsapp.com",
         Referer: "https://web.whatsapp.com/"
       }
     })
       .then(res => res.json())
       .then(async (res: WhatsAppMediaUploadPayload) => {
-        return {
-          url: res.url,
-          mimetype: file.mimetype,
-          mediaKey: file.mediaKey,
-          fileLength: file.fileLength,
-          fileSha256: file.fileSha256,
-          fileEncSha256: file.fileEncSha256,
-          jpegThumbnail: file.jpegThumbnail,
-          pngThumbnail: file.pngThumbnail,
-          seconds: file.seconds,
-          caption: file.caption,
-          gifPlayback: file.gifPlayback
-        };
+        return res;
       });
+  }
+
+  private async queryMediaConn(): Promise<{
+    hostname: any;
+    auth: string;
+    ttl: number;
+  }> {
+    return new Promise(async resolve => {
+      const messageTag = randHex(12).toUpperCase();
+      await this.sendSocketAsync(
+        messageTag,
+        `${messageTag},["query", "mediaConn"]`
+      ).then(async (data: WhatsAppMediaConnPayload) => {
+        resolve({
+          hostname: data.media_conn.hosts[0].hostname,
+          auth: data.media_conn.auth,
+          ttl: data.media_conn.ttl
+        });
+      });
+    });
   }
 
   private async encryptMedia(
@@ -1252,22 +1318,19 @@ export default class WhatsApp {
       const mac = HmacSha256(macKey, concatIntArray(iv, enc)).slice(0, 10);
       const fileSha256 = Sha256(file);
       const fileEncSha256 = Sha256(concatIntArray(enc, mac));
-      const type =
-        msgType.replace("Message", "") === "sticker"
-          ? "image"
-          : msgType.replace("Message", "");
+      const type = msgType === "sticker" ? "image" : msgType;
+      const { hostname, auth } = await this.queryMediaConn();
+      const token = Buffer.from(fileEncSha256).toString("base64");
+      const path = `mms/${type}`;
 
-      const mediaObj: WASendMedia = {
-        msgType,
-        caption,
+      const mediaObj: WAMedia = {
         mimetype,
-        url: "",
         mediaKey,
+        caption,
+        url: "",
         fileSha256,
         fileEncSha256,
-        id: messageTag,
-        fileLength: file.byteLength,
-        blob: Buffer.from(concatIntArray(enc, mac))
+        fileLength: file.byteLength
       };
 
       if (msgType === "sticker") {
@@ -1290,16 +1353,14 @@ export default class WhatsApp {
         mediaObj.gifPlayback = isGif;
       }
 
-      await this.sendSocketAsync(
-        messageTag,
-        `${messageTag},["action", "encr_upload", "${type}", "${Buffer.from(
-          fileEncSha256
-        ).toString("base64")}"]`
-      ).then(async (data: WhatsAppUploadMediaURL) => {
-        const media = await this.uploadMedia(data.url, mediaObj);
+      const media = await this.uploadMedia(
+        `https://${hostname}/${path}/${token}?auth=${auth}&token=${token}`,
+        concatIntArray(enc, mac)
+      );
 
-        resolve({ [msgType + "Message"]: media });
-      });
+      mediaObj.url = media.url;
+
+      resolve({ [msgType + "Message"]: mediaObj });
     });
   }
 
