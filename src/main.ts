@@ -458,8 +458,14 @@ export interface WAStubMessage {
 export default class WhatsApp {
   private apiSocket: WebSocket;
 
-  private keysPath?: string;
-  private qrPath: string;
+  private parameters : {
+    keysPath: string,
+    qrPath: string,
+    clientName : string,
+    clientShortName : string,
+    restoreSession : boolean
+  }
+
   private clientId?: string;
   private loginMsgId: string;
 
@@ -496,9 +502,7 @@ export default class WhatsApp {
   private qrCodeListeners: (() => void)[] = [];
 
   constructor(
-    qrPath = "./qrcode.png",
-    restoreSession = false,
-    keysPath = "./keys.json"
+    parameters = {}
   ) {
     const loginMsgId = "" + Date.now();
 
@@ -508,17 +512,25 @@ export default class WhatsApp {
 
     this.keyPair = null;
 
-    this.qrPath = resolvePath(".", qrPath);
+    this.parameters = {...{
+      keysPath : "./keys.json",
+      qrPath : "./qrcode.png",
+      clientName : "WhatsApp forwarder",
+      clientShortName : "WhatsAppForwarder",
+      restoreSession : false
+    }, ...parameters}
 
-    if (restoreSession) {
-      this.keysPath = resolvePath(".", keysPath);
+    this.parameters.qrPath = resolvePath(".", this.parameters.qrPath);
+
+    if (this.parameters.restoreSession) {
+      this.parameters.keysPath = resolvePath(".", this.parameters.keysPath);
     }
 
-    this.apiSocket.onopen = this.init(loginMsgId, restoreSession);
+    this.apiSocket.onopen = this.init(loginMsgId, this.parameters.restoreSession);
     this.loginMsgId = loginMsgId;
 
-    if (restoreSession) {
-      doesFileExist(this.keysPath!).then(doesExist => {
+    if (this.parameters.restoreSession) {
+      doesFileExist(this.parameters.keysPath!).then(doesExist => {
         if (!doesExist) {
           this.apiSocket.onmessage = this.onMessage(loginMsgId);
         }
@@ -573,7 +585,7 @@ export default class WhatsApp {
 
   private saveKeys() {
     writeFile(
-      this.keysPath!,
+      this.parameters.keysPath!,
       JSON.stringify({
         clientId: this.clientId,
         clientToken: this.clientToken,
@@ -587,7 +599,7 @@ export default class WhatsApp {
 
   private async getKeys() {
     return new Promise((resolve, reject) => {
-      readFile(this.keysPath!, "utf-8", (err, data) => {
+      readFile(this.parameters.keysPath!, "utf-8", (err, data) => {
         if (err) reject(err);
 
         const {
@@ -692,7 +704,7 @@ export default class WhatsApp {
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
-            if (this.keysPath) {
+            if (this.parameters.keysPath) {
               this.saveKeys();
             }
           } else if (
@@ -712,7 +724,7 @@ export default class WhatsApp {
 
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
-            if (this.keysPath) {
+            if (this.parameters.keysPath) {
               this.saveKeys();
             }
           } else if (
@@ -1585,7 +1597,7 @@ export default class WhatsApp {
       await qrcode.toDataURL(`${data.ref},${publicKeyBase64},${this.clientId}`)
     );
 
-    writeFile(this.qrPath, qrCode.data, err => {
+    writeFile(this.parameters.qrPath, qrCode.data, err => {
       if (err) console.error(err);
       this.qrCodeListeners.forEach(func => func());
     });
@@ -1595,7 +1607,7 @@ export default class WhatsApp {
     return async (e: WebSocket.OpenEvent) => {
       if (
         !restoreSession ||
-        (restoreSession && !(await doesFileExist(this.keysPath!)))
+        (restoreSession && !(await doesFileExist(this.parameters.keysPath!)))
       ) {
         this.clientId = crypto.randomBytes(16).toString("base64");
       } else {
@@ -1603,10 +1615,10 @@ export default class WhatsApp {
       }
 
       e.target.send(
-        `${loginMsgId},["admin","init",[0,4,2080],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
+        `${loginMsgId},["admin","init",[0,4,2080],["${this.parameters.clientName}","${this.parameters.clientShortName}"],"${this.clientId}",true]`
       );
 
-      if (restoreSession && (await doesFileExist(this.keysPath!))) {
+      if (restoreSession && (await doesFileExist(this.parameters.keysPath!))) {
         this.restoreSession(loginMsgId);
       }
     };

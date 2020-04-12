@@ -20,10 +20,19 @@ yarn add @noamalffasy/js-whatsapp
 
 ### Setting up
 
+All parameters are optional.  The following are the default values.  
 ```js
 import Whatsapp from "@noamalffasy/js-whatsapp";
 
-const wap = new Whatsapp();
+const params = {
+  keysPath : "./keys.json",
+  qrPath : "./qrcode.png",
+  clientName : "WhatsApp forwarder",
+  clientShortName : "WhatsAppForwarder",
+  restoreSession : false
+}
+
+const wap = new Whatsapp(params);
 ```
 
 ### Login
@@ -41,7 +50,7 @@ const wap = new Whatsapp();
 to:
 
 ```js
-const wap = new Whatsapp(true);
+const wap = new Whatsapp({restoreSession : true});
 ```
 
 ### Handle messages
