@@ -1603,7 +1603,7 @@ export default class WhatsApp {
       }
 
       e.target.send(
-        `${loginMsgId},["admin","init",[0,4,2080],["WhatsApp forwarder","WhatsAppForwarder"],"${this.clientId}",true]`
+        `${loginMsgId},["admin","init",[0,4,2080],["WhatsApp forwarder","WhatsAppForwarder","0.1.0"],"${this.clientId}",true]`
       );
 
       if (restoreSession && (await doesFileExist(this.keysPath!))) {
