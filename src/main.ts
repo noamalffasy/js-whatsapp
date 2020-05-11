@@ -518,13 +518,7 @@ export default class WhatsApp {
 
     this.keyPair = null;
 
-    this.parameters = {...{
-      keysPath : "./keys.json",
-      qrPath : "./qrcode.png",
-      clientName : "WhatsApp forwarder",
-      clientShortName : "WhatsAppForwarder",
-      restoreSession : false
-    }, ...parameters}
+    this.opts = Object.assign({}, opts, this.opts);
 
     this.parameters.qrPath = resolvePath(".", this.parameters.qrPath);
 
