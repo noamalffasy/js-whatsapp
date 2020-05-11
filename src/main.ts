@@ -502,7 +502,13 @@ export default class WhatsApp {
   private qrCodeListeners: (() => void)[] = [];
 
   constructor(
-    parameters = {}
+    opts = {      
+        keysPath: "./keys.json",
+        qrPath: "./qrcode.png",
+        clientName: "WhatsApp forwarder",
+        clientShortName: "WhatsAppForwarder",
+        restoreSession: false 
+    }
   ) {
     const loginMsgId = "" + Date.now();
 
