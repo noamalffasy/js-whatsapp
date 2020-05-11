@@ -585,7 +585,7 @@ export default class WhatsApp {
 
   private saveKeys() {
     writeFile(
-      this.parameters.keysPath!,
+      this.opts.keysPath!,
       JSON.stringify({
         clientId: this.clientId,
         clientToken: this.clientToken,
