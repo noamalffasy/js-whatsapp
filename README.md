@@ -50,7 +50,7 @@ const wap = new Whatsapp();
 to:
 
 ```js
-const wap = new Whatsapp({restoreSession : true});
+const wap = new Whatsapp({restoreSession: true});
 ```
 
 ### Handle messages
