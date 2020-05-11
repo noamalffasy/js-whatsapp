@@ -599,7 +599,7 @@ export default class WhatsApp {
 
   private async getKeys() {
     return new Promise((resolve, reject) => {
-      readFile(this.parameters.keysPath!, "utf-8", (err, data) => {
+      readFile(this.opts.keysPath!, "utf-8", (err, data) => {
         if (err) reject(err);
 
         const {
