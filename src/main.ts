@@ -1597,7 +1597,7 @@ export default class WhatsApp {
       await qrcode.toDataURL(`${data.ref},${publicKeyBase64},${this.clientId}`)
     );
 
-    writeFile(this.parameters.qrPath, qrCode.data, err => {
+    writeFile(this.opts.qrPath, qrCode.data, err => {
       if (err) console.error(err);
       this.qrCodeListeners.forEach(func => func());
     });
