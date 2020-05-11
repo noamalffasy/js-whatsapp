@@ -520,7 +520,7 @@ export default class WhatsApp {
 
     this.opts = Object.assign({}, opts, this.opts);
 
-    this.parameters.qrPath = resolvePath(".", this.parameters.qrPath);
+    this.opts.qrPath = resolvePath(".", this.opts.qrPath);
 
     if (this.parameters.restoreSession) {
       this.parameters.keysPath = resolvePath(".", this.parameters.keysPath);
