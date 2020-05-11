@@ -24,15 +24,15 @@ All parameters are optional.  The following are the default values.
 ```js
 import Whatsapp from "@noamalffasy/js-whatsapp";
 
-const params = {
-  keysPath : "./keys.json",
-  qrPath : "./qrcode.png",
-  clientName : "WhatsApp forwarder",
-  clientShortName : "WhatsAppForwarder",
-  restoreSession : false
+const opts = {
+  keysPath: "./keys.json",
+  qrPath: "./qrcode.png",
+  clientName: "WhatsApp forwarder",
+  clientShortName: "WhatsAppForwarder",
+  restoreSession: false
 }
 
-const wap = new Whatsapp(params);
+const wap = new Whatsapp(opts);
 ```
 
 ### Login
