@@ -1618,7 +1618,7 @@ export default class WhatsApp {
         `${loginMsgId},["admin","init",[0,4,2080],["${this.opts.clientName}","${this.opts.clientShortName}"],"${this.clientId}",true]`
       );
 
-      if (restoreSession && (await doesFileExist(this.parameters.keysPath!))) {
+      if (restoreSession && (await doesFileExist(this.opts.keysPath!))) {
         this.restoreSession(loginMsgId);
       }
     };
