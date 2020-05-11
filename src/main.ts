@@ -526,7 +526,7 @@ export default class WhatsApp {
       this.parameters.keysPath = resolvePath(".", this.parameters.keysPath);
     }
 
-    this.apiSocket.onopen = this.init(loginMsgId, this.parameters.restoreSession);
+    this.apiSocket.onopen = this.init(loginMsgId, this.opts.restoreSession);
     this.loginMsgId = loginMsgId;
 
     if (this.parameters.restoreSession) {
