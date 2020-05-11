@@ -1607,7 +1607,7 @@ export default class WhatsApp {
     return async (e: WebSocket.OpenEvent) => {
       if (
         !restoreSession ||
-        (restoreSession && !(await doesFileExist(this.parameters.keysPath!)))
+        (restoreSession && !(await doesFileExist(this.opts.keysPath!)))
       ) {
         this.clientId = crypto.randomBytes(16).toString("base64");
       } else {
