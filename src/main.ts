@@ -458,12 +458,12 @@ export interface WAStubMessage {
 export default class WhatsApp {
   private apiSocket: WebSocket;
 
-  private parameters : {
+  private opts: {
     keysPath: string,
     qrPath: string,
-    clientName : string,
-    clientShortName : string,
-    restoreSession : boolean
+    clientName: string,
+    clientShortName: string,
+    restoreSession: boolean
   }
 
   private clientId?: string;
