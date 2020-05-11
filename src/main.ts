@@ -704,7 +704,7 @@ export default class WhatsApp {
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
-            if (this.parameters.keysPath) {
+            if (this.opts.keysPath) {
               this.saveKeys();
             }
           } else if (
