@@ -724,7 +724,7 @@ export default class WhatsApp {
 
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
-            if (this.parameters.keysPath) {
+            if (this.opts.keysPath) {
               this.saveKeys();
             }
           } else if (
