@@ -529,8 +529,8 @@ export default class WhatsApp {
     this.apiSocket.onopen = this.init(loginMsgId, this.opts.restoreSession);
     this.loginMsgId = loginMsgId;
 
-    if (this.parameters.restoreSession) {
-      doesFileExist(this.parameters.keysPath!).then(doesExist => {
+    if (this.opts.restoreSession) {
+      doesFileExist(this.opts.keysPath!).then(doesExist => {
         if (!doesExist) {
           this.apiSocket.onmessage = this.onMessage(loginMsgId);
         }
