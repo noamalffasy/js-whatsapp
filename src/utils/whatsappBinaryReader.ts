@@ -174,7 +174,10 @@ export class WABinaryReader {
       return concatIntArray(i, new TextEncoder().encode("@"), j);
     } else if (tag === WATags.NIBBLE_8 || tag === WATags.HEX_8) {
       return new TextEncoder().encode(this.readPacked8(tag));
-    } else {
+    } else if (tag === WATags.UNKNOWN) {
+      return new TextEncoder().encode(this.readPacked8(tag));
+    }
+    else {
       throw new Error(`Invalid string with tag ${tag}`);
     }
   }

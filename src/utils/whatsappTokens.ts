@@ -5,6 +5,7 @@ import protobuf from "protobufjs";
 export const WATags = {
   LIST_EMPTY: 0,
   STREAM_END: 2,
+  UNKNOWN: 174,
   DICTIONARY_0: 236,
   DICTIONARY_1: 237,
   DICTIONARY_2: 238,
