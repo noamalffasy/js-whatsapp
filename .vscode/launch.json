@@ -7,10 +7,9 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch via NPM",
-            "runtimeExecutable": "npm",
+            "name": "Launch via Yarn",
+            "runtimeExecutable": "yarn",
             "runtimeArgs": [
-                "run-script",
                 "debug"
             ],
             "port": 9229
