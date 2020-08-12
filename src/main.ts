@@ -1263,8 +1263,8 @@ export default class WhatsApp {
     );
   }
 
-  private async uploadMedia(uploadUrl: string, body: Uint8Array) {
-    return await fetch(uploadUrl, {
+  private async uploadMedia(hostnames: string[], uploadPath: string, body: Uint8Array): Promise<WhatsAppMediaUploadPayload> {
+    return await fetch(`https://${hostnames[0]}${uploadPath}`, {
       body,
       method: "POST",
       headers: {
@@ -1274,15 +1274,12 @@ export default class WhatsApp {
     })
       .then(res => res.json())
       .then(async (res: WhatsAppMediaUploadPayload) => {
-        return res;
+        if (res.url) return res;
+        return await this.uploadMedia(hostnames.slice(1), uploadPath, body);
       });
   }
 
-  private async queryMediaConn(): Promise<{
-    hostname: any;
-    auth: string;
-    ttl: number;
-  }> {
+  private async queryMediaConn(): Promise<WhatsAppMediaConnPayload["media_conn"]> {
     return new Promise(async resolve => {
       const messageTag = randHex(12).toUpperCase();
       await this.sendSocketAsync(
@@ -1290,7 +1287,7 @@ export default class WhatsApp {
         `${messageTag},["query", "mediaConn"]`
       ).then(async (data: WhatsAppMediaConnPayload) => {
         resolve({
-          hostname: data.media_conn.hosts[0].hostname,
+          hosts: data.media_conn.hosts,
           auth: data.media_conn.auth,
           ttl: data.media_conn.ttl
         });
@@ -1318,7 +1315,7 @@ export default class WhatsApp {
       const fileSha256 = Sha256(file);
       const fileEncSha256 = Sha256(concatIntArray(enc, mac));
       const type = msgType === "sticker" ? "image" : msgType;
-      const { hostname, auth } = await this.queryMediaConn();
+      const { hosts, auth } = await this.queryMediaConn();
       const token = Buffer.from(fileEncSha256).toString("base64");
       const path = `mms/${type}`;
 
@@ -1353,7 +1350,8 @@ export default class WhatsApp {
       }
 
       const media = await this.uploadMedia(
-        `https://${hostname}/${path}/${token}?auth=${auth}&token=${token}`,
+        hosts.map(host => host.hostname),
+        `/${path}/${token}?auth=${auth}&token=${token}`,
         concatIntArray(enc, mac)
       );
 
