@@ -55,7 +55,9 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     this.apiClient.on("qrCode", () => this.emit("qrCode"));
     this.apiClient.on("ready", () => {
       this.emit("ready");
-      this.myWid = this.apiClient.myWid;
+    });
+    this.apiClient.on("myWid", (wid) => {
+      this.myWid = wid;
     });
     this.apiClient.on("message", (msg, description) =>
       this.emit("message", msg, description)

@@ -57,6 +57,7 @@ interface WAListeners {
   noNetwork: () => void;
   loggedOut: () => void;
   ready: () => void;
+  myWid: (wid: string) => void;
   qrCode: () => void;
 }
 
@@ -248,6 +249,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           ) {
             this.isLoggedIn = true;
             this.myWid = (data as WhatsAppConnPayload)[1].wid;
+            this.emit("myWid", this.myWid);
             this.setupEncryptionKeys(data as WhatsAppConnPayload);
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
@@ -268,6 +270,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
             this.clientToken = clientToken;
             this.serverToken = serverToken;
             this.myWid = (data as WhatsAppConnPayload)[1].wid;
+            this.emit("myWid", this.myWid);
 
             setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
@@ -514,7 +517,10 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           msgType: "image";
           mimetype: string;
           file: Buffer;
-          caption: { text: string; mentionedJids?: WAContextInfo["mentionedJid"] };
+          caption: {
+            text: string;
+            mentionedJids?: WAContextInfo["mentionedJid"];
+          };
         }
       | {
           msgType: "sticker";
@@ -525,7 +531,10 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           msgType: "video";
           mimetype: string;
           file: Buffer;
-          caption: { text: string; mentionedJids?: WAContextInfo["mentionedJid"] };
+          caption: {
+            text: string;
+            mentionedJids?: WAContextInfo["mentionedJid"];
+          };
           duration: number;
           isGif: boolean;
         }
@@ -605,7 +614,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       mediaObj.url = media.url;
 
       resolve({
-        [_mediaObj.msgType + "Message"]: mediaObj
+        [_mediaObj.msgType + "Message"]: mediaObj,
       });
     });
   }
