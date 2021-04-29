@@ -23,6 +23,7 @@ interface WAListeners {
   node: (node: WANode) => void;
   message: (msg: WAWebMessage, description: string) => void;
   messageStub: (msg: WAStubMessage) => void;
+  newChat: (chat: WhatsAppGroupMetadataPayload) => void;
   noNetwork: () => void;
   loggedOut: () => void;
   ready: () => void;
@@ -165,6 +166,8 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
               count: "0",
               t: "" + chat.creation,
             });
+
+            this.emit("newChat", chat);
           }
         } else if (
           msg.messageStubType === "GROUP_PARTICIPANT_REMOVE" &&
