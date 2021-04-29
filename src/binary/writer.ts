@@ -1,5 +1,5 @@
-import { WATags, WASingleByteTokens, WAFlags } from "./whatsappTokens";
-import { WANode, whatsappReadBinary } from "./whatsappBinaryReader";
+import { WATags, WASingleByteTokens } from "./tokens";
+import { WANode } from "./reader";
 
 class WABinaryWriter {
   data: number[] = [];

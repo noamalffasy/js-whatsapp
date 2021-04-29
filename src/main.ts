@@ -2,7 +2,7 @@ import fetch from "node-fetch";
 import { TypedEmitter } from "tiny-typed-emitter";
 
 import { randHex } from "./utils/encryption";
-import { WAMessageNode } from "./utils/whatsappBinaryWriter";
+import { WAMessageNode } from "./binary/writer";
 import WABaseClient from "./baseClient";
 import {
   WhatsAppGroupMetadataPayload,
@@ -16,7 +16,7 @@ import {
   WAStubMessage,
   WAReceiveMedia,
 } from "./types";
-import { WANode } from "./utils/whatsappBinaryReader";
+import { WANode } from "./binary/reader";
 
 interface WAListeners {
   node: (node: WANode) => void;

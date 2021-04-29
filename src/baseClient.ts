@@ -38,17 +38,14 @@ import {
   dataUrlToBuffer,
 } from "./utils/encryption";
 import { arraysEqual, concatIntArray } from "./utils/arrays";
-import { whatsappReadBinary, WANode } from "./utils/whatsappBinaryReader";
-import {
-  WAMessageNode,
-  whatsappWriteBinary,
-} from "./utils/whatsappBinaryWriter";
+import { whatsappReadBinary, WANode } from "./binary/reader";
+import { WAMessageNode, whatsappWriteBinary } from "./binary/writer";
 import {
   WAMetrics,
   WAFlags,
   WAWebMessageInfo,
   WAMediaAppInfo,
-} from "./utils/whatsappTokens";
+} from "./binary/tokens";
 
 interface WAListeners {
   node: (node: WANode) => void;

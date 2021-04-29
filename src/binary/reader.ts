@@ -3,8 +3,8 @@ import {
   WASingleByteTokens,
   WADoubleByteTokens,
   WAWebMessageInfo
-} from "./whatsappTokens";
-import { concatIntArray } from "./arrays";
+} from "./tokens";
+import { concatIntArray } from "../utils/arrays";
 
 export interface WANode {
   description: string;
