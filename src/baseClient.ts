@@ -674,8 +674,8 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
   /**
    * Decrypts a given media object
-   * @param mediaObj The media object received from the server
-   * @param type The media type
+   * @param {WAReceiveMedia} mediaObj The media object received from the server
+   * @param {WAMediaTypes} type The media type
    * @returns The decrypted media message
    */
   async decryptMedia(
