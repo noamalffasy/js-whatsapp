@@ -142,7 +142,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     );
   }
 
-  protected async getKeys() {
+  protected async getKeys(): Promise<void> {
     return new Promise((resolve, reject) => {
       readFile(this.keysPath!, "utf-8", (err, data) => {
         if (err) reject(err);
