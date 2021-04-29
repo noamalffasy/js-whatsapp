@@ -76,7 +76,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     }
 
     // Iterate over all of the messages and update the data accordingly
-    (allNodes.content as WANode[]).forEach(async (node) => {
+    for (const node of allNodes.content as WANode[]) {
       if (
         node.description === "user" &&
         ((node.attributes as unknown) as WAContact).jid.endsWith("c.us")
@@ -183,7 +183,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
 
         this.emit("messageStub", msg);
       }
-    });
+    }
   }
 
   /**
