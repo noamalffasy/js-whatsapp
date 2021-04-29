@@ -16,6 +16,10 @@ export async function sendMediaMessage(
   const nextId = randHex(12).toUpperCase();
   const mediaProto = await this.apiClient.encryptMedia(mediaObj);
 
+  if (!mediaProto) {
+    throw "Unable to upload media";
+  }
+
   const media = await this.apiClient.sendMediaProto({
     remoteJid,
     mediaFile: (mediaProto[
@@ -48,6 +52,10 @@ export async function sendQuotedMediaMessage(
   quotedInfo: Parameters<WABaseClient["sendQuotedMessage"]>[2]
 ): Promise<{ id: string; content: WAMessage }> {
   const media = await this.apiClient.encryptMedia(mediaObj);
+
+  if (!media) {
+    throw "Unable to upload media";
+  }
 
   return await this.apiClient.sendQuotedMessage(
     media,
