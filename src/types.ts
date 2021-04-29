@@ -46,6 +46,14 @@ export interface WhatsAppPropsPayload {
   };
 }
 
+export interface WhatsAppChallengePayload {
+  0: "Cmd"
+  1: {
+    type: "challenge";
+    challenge: string;
+  }
+}
+
 export interface WhatsAppUploadMediaURL {
   status: number;
   url: string;

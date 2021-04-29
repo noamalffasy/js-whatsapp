@@ -26,7 +26,8 @@ import {
   WhatsAppMediaConnPayload,
   WAMedia,
   WADecryptedMedia,
-  WAMediaTypes
+  WAMediaTypes,
+  WhatsAppChallengePayload,
 } from "./types";
 import { doesFileExist } from "./utils/path";
 import {
@@ -82,7 +83,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
   public isLoggedIn: boolean = false;
 
-  protected eventListeners: {
+  protected messageListeners: {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
 
@@ -94,8 +95,6 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     }
   ) {
     super();
-
-    const loginMsgId = "" + Date.now();
 
     this.apiSocket = new WebSocket("wss://web.whatsapp.com/ws", {
       headers: { Origin: "https://web.whatsapp.com" },
@@ -109,24 +108,192 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       this.keysPath = resolvePath(".", opts.keysPath);
     }
 
-    this.apiSocket.onopen = this.init(loginMsgId, opts.restoreSession);
+    this.init(opts.restoreSession);
 
-    if (opts.restoreSession) {
-      doesFileExist(this.keysPath!).then((doesExist) => {
-        if (!doesExist) {
-          this.apiSocket.onmessage = this.onSocketMessage(loginMsgId);
-        }
-      });
+    this.apiSocket.onmessage = this.onSocketMessage;
+  }
+
+  protected async init(restoreSession: boolean) {
+    const loginMsgId = "" + Date.now();
+    const doKeysExist = await doesFileExist(this.keysPath!);
+
+    if (!restoreSession || (restoreSession && !doKeysExist)) {
+      this.clientId = crypto.randomBytes(16).toString("base64");
     } else {
-      this.apiSocket.onmessage = this.onSocketMessage(loginMsgId);
+      await this.getKeys();
+    }
+
+    this.apiSocket.on("open", async () => {
+      const data: WhatsAppLoginPayload = await this.sendSocketAsync(
+        loginMsgId,
+        JSON.stringify([
+          "admin",
+          "init",
+          [0, 4, 2080],
+          ["WhatsApp forwarder", "WhatsAppForwarder", "0.1.0"],
+          this.clientId,
+          true,
+        ])
+      );
+
+      if (restoreSession && doKeysExist) {
+        this.restoreSession(loginMsgId);
+      } else {
+        if (!this.clientToken) {
+          await this.setupQrCode(data.ref);
+        } else if (data.status && !data.ref) {
+        }
+      }
+    });
+  }
+
+  protected async restoreSession(loginMsgId: string) {
+    const data: { status: number } = await this.sendSocketAsync(
+      loginMsgId,
+      JSON.stringify([
+        "admin",
+        "login",
+        this.clientToken,
+        this.serverToken,
+        this.clientId,
+        "takeover",
+      ])
+    );
+
+    if (data.status !== 200) {
+      this.emit("loggedOut");
     }
   }
 
-  protected addEventListener(
+  protected async setupQrCode(ref: string) {
+    this.keyPair = generateKeyPair(Uint8Array.from(crypto.randomBytes(32)));
+    const publicKeyBase64 = Buffer.from(this.keyPair.public).toString("base64");
+    const qrCode = dataUrlToBuffer(
+      await qrcode.toDataURL(`${ref},${publicKeyBase64},${this.clientId}`)
+    );
+
+    writeFile(this.qrPath, qrCode.data, (err) => {
+      if (err) console.error(err);
+      this.emit("qrCode");
+    });
+  }
+
+  private handleLoginPayload(data: WhatsAppConnPayload) {
+    this.isLoggedIn = true;
+    this.myWid = (data as WhatsAppConnPayload)[1].wid;
+    this.emit("myWid", this.myWid);
+
+    setTimeout(this.keepAlive.bind(this), 20 * 1000);
+
+    if (this.keysPath) {
+      this.saveKeys();
+    }
+
+    // Login
+    if (data[1].secret) {
+      this.setupEncryptionKeys(data as WhatsAppConnPayload);
+      // Restore session
+    } else if (data[1].clientToken) {
+      const { clientToken, serverToken } = (data as WhatsAppConnPayload)[1];
+
+      this.clientToken = clientToken;
+      this.serverToken = serverToken;
+    }
+  }
+
+  protected setupEncryptionKeys(data: WhatsAppConnPayload) {
+    const decodedSecret = Uint8Array.from(
+      Buffer.from(data[1].secret, "base64")
+    );
+    const publicKey = decodedSecret.slice(0, 32);
+    const sharedSecret = sharedKey(this.keyPair!.private, publicKey);
+    const sharedSecretExpanded = HKDF(sharedSecret, 80);
+    const hmacValidation = HmacSha256(
+      sharedSecretExpanded.slice(32, 64),
+      concatIntArray(decodedSecret.slice(0, 32), decodedSecret.slice(64))
+    );
+
+    if (!arraysEqual(hmacValidation, decodedSecret.slice(32, 64)))
+      throw "hmac mismatch";
+
+    const keysEncrypted = concatIntArray(
+      sharedSecretExpanded.slice(64),
+      decodedSecret.slice(64)
+    );
+    const keysDecrypted = AESDecrypt(
+      sharedSecretExpanded.slice(0, 32),
+      keysEncrypted
+    );
+
+    this.encKey = keysDecrypted.slice(0, 32);
+    this.macKey = keysDecrypted.slice(32, 64);
+
+    this.clientToken = data[1].clientToken;
+    this.serverToken = data[1].serverToken;
+  }
+
+  async sendSocketAsync(messageTag: string, data: any): Promise<any> {
+    return new Promise((resolve) => {
+      const encoder = new TextEncoder();
+      this.apiSocket.send(
+        concatIntArray(
+          encoder.encode(messageTag),
+          encoder.encode(","),
+          data instanceof Uint8Array ? data : encoder.encode(data)
+        )
+      );
+
+      this.addMessageListener(async (e) => {
+        if (typeof e.data === "string") {
+          const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
+
+          if (receivedMessageId === messageTag && e.data !== `${messageTag},`) {
+            const data = JSON.parse(e.data.substring(e.data.indexOf(",") + 1));
+            delete this.messageListeners[messageTag];
+
+            resolve(data);
+          }
+        }
+      }, messageTag);
+    });
+  }
+
+  protected addMessageListener(
     cb: (e: WebSocket.MessageEvent) => void,
     id: string
   ) {
-    this.eventListeners[id] = cb;
+    this.messageListeners[id] = cb;
+  }
+
+  private async onSocketMessage(e: WebSocket.MessageEvent) {
+    Object.values(this.messageListeners).forEach((func) => func(e));
+
+    if (typeof e.data === "string") {
+      try {
+        const messageTag = e.data.substring(0, e.data.indexOf(","));
+        const data = JSON.parse(e.data.substring(e.data.indexOf(",") + 1)) as
+          | WhatsAppConnPayload
+          | WhatsAppStreamPayload
+          | WhatsAppPropsPayload
+          | WhatsAppChallengePayload;
+
+        if (Array.isArray(data) && data.length >= 2 && data[0] === "Conn") {
+          this.handleLoginPayload(data);
+        } else if (
+          Array.isArray(data) &&
+          data.length >= 2 &&
+          data[0] === "Cmd" &&
+          data[1].type === "challenge"
+        ) {
+          this.solveChallenge(data, messageTag);
+        }
+      } catch {}
+    } else if (Buffer.isBuffer(e.data)) {
+      const result = new Uint8Array(e.data);
+      const node = await this.decryptMessage(result);
+
+      this.emit("node", node);
+    }
   }
 
   protected saveKeys() {
@@ -167,142 +334,11 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     });
   }
 
-  protected async restoreSession(loginMsgId: string) {
-    this.apiSocket.send(
-      `${loginMsgId},["admin","login","${this.clientToken}","${this.serverToken}","${this.clientId}","takeover"]`
-    );
-
-    this.apiSocket.onmessage = (e) => {
-      if (typeof e.data === "string") {
-        const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
-
-        if (receivedMessageId === loginMsgId && e.data !== `${loginMsgId},`) {
-          const data = JSON.parse(
-            e.data.substring(e.data.indexOf(",") + 1)
-          ) as { status: number };
-
-          if (data.status === 200) {
-            this.apiSocket.onmessage = this.onSocketMessage(loginMsgId);
-          } else {
-            this.emit("loggedOut");
-          }
-        }
-      }
-    };
-  }
-
   protected keepAlive() {
     if (this.apiSocket) {
       this.apiSocket.send("?,,");
       setTimeout(this.keepAlive.bind(this), 20 * 1000);
     }
-  }
-
-  public disconnect() {
-    this.apiSocket.send(`goodbye,,["admin","Conn","disconnect"]`);
-  }
-
-  async sendSocketAsync(messageTag: string, data: any): Promise<any> {
-    return new Promise((resolve) => {
-      this.apiSocket.send(data);
-
-      this.addEventListener(async (e) => {
-        if (typeof e.data === "string") {
-          const receivedMessageId = e.data.substring(0, e.data.indexOf(","));
-
-          if (receivedMessageId === messageTag && e.data !== `${messageTag},`) {
-            const data = JSON.parse(e.data.substring(e.data.indexOf(",") + 1));
-            delete this.eventListeners[messageTag];
-
-            resolve(data);
-          }
-        }
-      }, messageTag);
-    });
-  }
-
-  onSocketMessage(loginMsgId: string) {
-    return async (e: WebSocket.MessageEvent) => {
-      Object.values(this.eventListeners).forEach((func) => func(e));
-
-      if (typeof e.data === "string") {
-        try {
-          const messageTag = e.data.substring(0, e.data.indexOf(","));
-          const data = JSON.parse(e.data.substring(e.data.indexOf(",") + 1)) as
-            | WhatsAppLoginPayload
-            | WhatsAppConnPayload
-            | WhatsAppStreamPayload
-            | WhatsAppPropsPayload
-            | WhatsAppUploadMediaURL;
-
-          // Initial response and setting up the QR code
-          if (messageTag === loginMsgId && !this.clientToken) {
-            await this.setupQrCode(data as WhatsAppLoginPayload);
-            // Encryption and device data
-          } else if (
-            Array.isArray(data) &&
-            data.length >= 2 &&
-            data[0] === "Conn" &&
-            data[1].secret
-          ) {
-            this.isLoggedIn = true;
-            this.myWid = (data as WhatsAppConnPayload)[1].wid;
-            this.emit("myWid", this.myWid);
-            this.setupEncryptionKeys(data as WhatsAppConnPayload);
-            setTimeout(this.keepAlive.bind(this), 20 * 1000);
-
-            if (this.keysPath) {
-              this.saveKeys();
-            }
-          } else if (
-            Array.isArray(data) &&
-            data.length >= 2 &&
-            data[0] === "Conn" &&
-            data[1].clientToken
-          ) {
-            const {
-              clientToken,
-              serverToken,
-            } = (data as WhatsAppConnPayload)[1];
-            this.isLoggedIn = true;
-            this.clientToken = clientToken;
-            this.serverToken = serverToken;
-            this.myWid = (data as WhatsAppConnPayload)[1].wid;
-            this.emit("myWid", this.myWid);
-
-            setTimeout(this.keepAlive.bind(this), 20 * 1000);
-
-            if (this.keysPath) {
-              this.saveKeys();
-            }
-          } else if (
-            Array.isArray(data) &&
-            data.length >= 2 &&
-            data[0] === "Cmd" &&
-            data[1].type === "challenge"
-          ) {
-            const str = data[1].challenge;
-            const decoded = Buffer.from(str, "base64");
-            const signed = HmacSha256(this.macKey, Uint8Array.from(decoded));
-            const encoded = Buffer.from(signed).toString("base64");
-
-            this.apiSocket.send(
-              `${messageTag}, ["admin", "challenge", "${encoded}", "${this.serverToken}", "${this.clientId}"]`
-            );
-          } else if (
-            (data as WhatsAppLoginPayload).status &&
-            !(data as WhatsAppLoginPayload).ref &&
-            messageTag === loginMsgId
-          ) {
-          }
-        } catch {}
-      } else if (Buffer.isBuffer(e.data)) {
-        const result = new Uint8Array(e.data);
-        const node = await this.decryptMessage(result);
-
-        this.emit("node", node);
-      }
-    };
   }
 
   async decryptMessage(result: Uint8Array) {
@@ -338,20 +374,17 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     );
   }
 
-  async sendProto(
+  async encryptAndSendNode(
     msgData: WAMessageNode,
     id: string,
     metric: keyof typeof WAMetrics = "MESSAGE"
   ) {
-    const encoder = new TextEncoder();
     const cipher = AESEncrypt(this.encKey, await whatsappWriteBinary(msgData));
     const encryptedMsg = concatIntArray(
       HmacSha256(this.macKey, cipher),
       cipher
     );
     const payload = concatIntArray(
-      encoder.encode(id),
-      encoder.encode(","),
       Uint8Array.from([WAMetrics[metric]]),
       Uint8Array.from([WAFlags.IGNORE]),
       encryptedMsg
@@ -383,6 +416,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       status: 1,
       message: content,
     };
+
     const msgData: WAMessageNode = {
       description: "action",
       attributes: {
@@ -397,20 +431,9 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       ],
     };
 
-    await this.sendProto(msgData, id);
+    await this.encryptAndSendNode(msgData, id);
 
     return { id, content };
-  }
-
-  async getGroupMetadata(
-    remoteJid: string
-  ): Promise<WhatsAppGroupMetadataPayload> {
-    const id = randHex(10).toUpperCase();
-
-    return await this.sendSocketAsync(
-      id,
-      `${id},,["query","GroupMetadata","${remoteJid}"]`
-    );
   }
 
   async sendQuotedMessage(
@@ -423,21 +446,22 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     },
     mentionedJids?: WAContextInfo["mentionedJid"]
   ) {
+    const { quotedMsg, quotedAuthorJid, quotedMsgId } = quotedInfo;
+    const mentionedJid =
+      mentionedJids?.concat(
+        quotedInfo.quotedMsg.extendedTextMessage?.contextInfo?.mentionedJid ??
+          []
+      ) ?? [];
+
     const contextInfo = {
-      mentionedJid: mentionedJids
-        ? quotedInfo.quotedMsg.extendedTextMessage
-          ? quotedInfo.quotedMsg.extendedTextMessage?.contextInfo?.mentionedJid?.concat(
-              mentionedJids
-            )
-          : mentionedJids
-        : [],
-      stanzaId: quotedInfo.quotedMsgId,
-      participant: quotedInfo.quotedAuthorJid,
-      quotedMessage: quotedInfo.quotedMsg.extendedTextMessage
+      mentionedJid,
+      stanzaId: quotedMsgId,
+      participant: quotedAuthorJid,
+      quotedMessage: quotedMsg.extendedTextMessage
         ? {
-            conversation: quotedInfo.quotedMsg.extendedTextMessage.text,
+            conversation: quotedMsg.extendedTextMessage.text,
           }
-        : quotedInfo.quotedMsg,
+        : quotedMsg,
     };
 
     if (content.conversation) {
@@ -451,7 +475,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
         remoteJid
       );
     } else {
-      const quotingContent = Object.assign({}, content);
+      const quotingContent = { ...content };
       const innerContent = Object.keys(quotingContent)
         .map((_key) => {
           const key: keyof typeof quotingContent = _key as any;
@@ -473,32 +497,14 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     }
   }
 
-  async uploadMedia(
-    hostnames: string[],
-    uploadPath: string,
-    body: Uint8Array
-  ): Promise<WhatsAppMediaUploadPayload> {
-    return await fetch(`https://${hostnames[0]}${uploadPath}`, {
-      body,
-      method: "POST",
-      headers: {
-        Origin: "https://web.whatsapp.com",
-        Referer: "https://web.whatsapp.com/",
-      },
-    })
-      .then((res) => res.json())
-      .then(async (res: WhatsAppMediaUploadPayload) => {
-        if (res.url) return res;
-        return await this.uploadMedia(hostnames.slice(1), uploadPath, body);
-      });
-  }
-
-  async queryMediaConn(): Promise<WhatsAppMediaConnPayload["media_conn"]> {
+  async getMediaConnectionData(): Promise<
+    WhatsAppMediaConnPayload["media_conn"]
+  > {
     return new Promise(async (resolve) => {
       const messageTag = randHex(12).toUpperCase();
       await this.sendSocketAsync(
         messageTag,
-        `${messageTag},["query", "mediaConn"]`
+        JSON.stringify(["query", "mediaConn"])
       ).then(async (data: WhatsAppMediaConnPayload) => {
         resolve({
           hosts: data.media_conn.hosts,
@@ -507,6 +513,35 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
         });
       });
     });
+  }
+
+  async uploadMedia(
+    type: Exclude<WAMediaTypes, "sticker">,
+    token: string,
+    body: Uint8Array
+  ): Promise<WhatsAppMediaUploadPayload | null> {
+    const { hosts, auth } = await this.getMediaConnectionData();
+
+    const hostnames = hosts.map((host) => host.hostname);
+    const uploadPath = `/mms/${type}/${token}?auth=${auth}&token=${token}`;
+
+    for (const hostname of hostnames) {
+      const res: WhatsAppMediaUploadPayload = await fetch(
+        `https://${hostname}${uploadPath}`,
+        {
+          body,
+          method: "POST",
+          headers: {
+            Origin: "https://web.whatsapp.com",
+            Referer: "https://web.whatsapp.com/",
+          },
+        }
+      ).then((res) => res.json());
+
+      if (res.url) return res;
+    }
+
+    return null;
   }
 
   async encryptMedia(
@@ -547,74 +582,72 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           mimetype: string;
           file: Buffer;
         }
-  ): Promise<WAMessage> {
-    return new Promise(async (resolve) => {
-      const mediaKey = Uint8Array.from(crypto.randomBytes(32));
-      const mediaKeyExpanded = HKDF(
-        mediaKey,
-        112,
-        WAMediaAppInfo[_mediaObj.msgType]
-      );
-      const iv = mediaKeyExpanded.slice(0, 16);
-      const cipherKey = mediaKeyExpanded.slice(16, 48);
-      const macKey = mediaKeyExpanded.slice(48, 80);
-      const enc = AESEncrypt(
-        cipherKey,
-        Uint8Array.from(_mediaObj.file),
-        iv,
-        false
-      );
-      const mac = HmacSha256(macKey, concatIntArray(iv, enc)).slice(0, 10);
-      const fileSha256 = Sha256(_mediaObj.file);
-      const fileEncSha256 = Sha256(concatIntArray(enc, mac));
-      const type =
-        _mediaObj.msgType === "sticker" ? "image" : _mediaObj.msgType;
-      const { hosts, auth } = await this.queryMediaConn();
-      const token = Buffer.from(fileEncSha256).toString("base64");
-      const path = `mms/${type}`;
+  ): Promise<WAMessage | null> {
+    const mediaKey = Uint8Array.from(crypto.randomBytes(32));
+    const mediaKeyExpanded = HKDF(
+      mediaKey,
+      112,
+      WAMediaAppInfo[_mediaObj.msgType]
+    );
+    const iv = mediaKeyExpanded.slice(0, 16);
+    const cipherKey = mediaKeyExpanded.slice(16, 48);
+    const macKey = mediaKeyExpanded.slice(48, 80);
+    const enc = AESEncrypt(
+      cipherKey,
+      Uint8Array.from(_mediaObj.file),
+      iv,
+      false
+    );
+    const mac = HmacSha256(macKey, concatIntArray(iv, enc)).slice(0, 10);
+    const fileSha256 = Sha256(_mediaObj.file);
+    const fileEncSha256 = Sha256(concatIntArray(enc, mac));
+    const type = _mediaObj.msgType === "sticker" ? "image" : _mediaObj.msgType;
 
-      const mediaObj: WAMedia = {
-        mimetype: _mediaObj.mimetype,
-        mediaKey,
-        caption: "caption" in _mediaObj ? _mediaObj.caption.text : undefined,
-        url: "",
-        fileSha256,
-        fileEncSha256,
-        fileLength: _mediaObj.file.byteLength,
-      };
+    const mediaObj: WAMedia = {
+      mimetype: _mediaObj.mimetype,
+      mediaKey,
+      caption: "caption" in _mediaObj ? _mediaObj.caption.text : undefined,
+      url: "",
+      fileSha256,
+      fileEncSha256,
+      fileLength: _mediaObj.file.byteLength,
+    };
 
-      if (_mediaObj.msgType === "sticker") {
-        mediaObj.pngThumbnail = await sharp(_mediaObj.file)
-          .resize(100)
-          .png()
-          .toBuffer();
-      } else if (_mediaObj.msgType === "image") {
-        mediaObj.jpegThumbnail = await sharp(_mediaObj.file)
-          .resize(100)
-          .jpeg()
-          .toBuffer();
-      } else if (_mediaObj.msgType === "audio") {
-        if (_mediaObj.duration) {
-          mediaObj.seconds = _mediaObj.duration;
-        } else {
-          throw new Error("Audio messages require duration");
-        }
-      } else if (_mediaObj.msgType === "video") {
-        mediaObj.gifPlayback = _mediaObj.isGif;
+    if (_mediaObj.msgType === "sticker") {
+      mediaObj.pngThumbnail = await sharp(_mediaObj.file)
+        .resize(100)
+        .png()
+        .toBuffer();
+    } else if (_mediaObj.msgType === "image") {
+      mediaObj.jpegThumbnail = await sharp(_mediaObj.file)
+        .resize(100)
+        .jpeg()
+        .toBuffer();
+    } else if (_mediaObj.msgType === "audio") {
+      if (_mediaObj.duration) {
+        mediaObj.seconds = _mediaObj.duration;
+      } else {
+        throw new Error("Audio messages require duration");
       }
+    } else if (_mediaObj.msgType === "video") {
+      mediaObj.gifPlayback = _mediaObj.isGif;
+    }
 
-      const media = await this.uploadMedia(
-        hosts.map((host) => host.hostname),
-        `/${path}/${token}?auth=${auth}&token=${token}`,
-        concatIntArray(enc, mac)
-      );
+    const media = await this.uploadMedia(
+      type,
+      Buffer.from(fileEncSha256).toString("base64"),
+      concatIntArray(enc, mac)
+    );
 
+    if (media) {
       mediaObj.url = media.url;
 
-      resolve({
+      return {
         [_mediaObj.msgType + "Message"]: mediaObj,
-      });
-    });
+      };
+    }
+
+    return null;
   }
 
   async sendMediaProto(mediaProto: {
@@ -639,6 +672,12 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     return await this.sendMessage(node, mediaProto.remoteJid, mediaProto.msgId);
   }
 
+  /**
+   * Decrypts a given media object
+   * @param mediaObj The media object received from the server
+   * @param type The media type
+   * @returns The decrypted media message
+   */
   async decryptMedia(
     mediaObj: WAReceiveMedia,
     type: WAMediaTypes
@@ -671,68 +710,32 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     };
   }
 
-  protected setupEncryptionKeys(data: WhatsAppConnPayload) {
-    const decodedSecret = Uint8Array.from(
-      Buffer.from(data[1].secret, "base64")
-    );
-    const publicKey = decodedSecret.slice(0, 32);
-    const sharedSecret = sharedKey(this.keyPair!.private, publicKey);
-    const sharedSecretExpanded = HKDF(sharedSecret, 80);
-    const hmacValidation = HmacSha256(
-      sharedSecretExpanded.slice(32, 64),
-      concatIntArray(decodedSecret.slice(0, 32), decodedSecret.slice(64))
-    );
+  async getGroupMetadata(
+    remoteJid: string
+  ): Promise<WhatsAppGroupMetadataPayload> {
+    const id = randHex(10).toUpperCase();
 
-    if (!arraysEqual(hmacValidation, decodedSecret.slice(32, 64)))
-      throw "hmac mismatch";
-
-    const keysEncrypted = concatIntArray(
-      sharedSecretExpanded.slice(64),
-      decodedSecret.slice(64)
+    return await this.sendSocketAsync(
+      id,
+      `,` + JSON.stringify(["query", "GroupMetadata", remoteJid])
     );
-    const keysDecrypted = AESDecrypt(
-      sharedSecretExpanded.slice(0, 32),
-      keysEncrypted
-    );
-
-    this.encKey = keysDecrypted.slice(0, 32);
-    this.macKey = keysDecrypted.slice(32, 64);
-
-    this.clientToken = data[1].clientToken;
-    this.serverToken = data[1].serverToken;
   }
 
-  protected async setupQrCode(data: WhatsAppLoginPayload) {
-    this.keyPair = generateKeyPair(Uint8Array.from(crypto.randomBytes(32)));
-    const publicKeyBase64 = Buffer.from(this.keyPair.public).toString("base64");
-    const qrCode = dataUrlToBuffer(
-      await qrcode.toDataURL(`${data.ref},${publicKeyBase64},${this.clientId}`)
-    );
+  private solveChallenge(
+    data: WhatsAppChallengePayload & any[],
+    messageTag: string
+  ) {
+    const str = data[1].challenge;
+    const decoded = Buffer.from(str, "base64");
+    const signed = HmacSha256(this.macKey, Uint8Array.from(decoded));
+    const encoded = Buffer.from(signed).toString("base64");
 
-    writeFile(this.qrPath, qrCode.data, (err) => {
-      if (err) console.error(err);
-      this.emit("qrCode");
-    });
+    this.apiSocket.send(
+      `${messageTag}, ["admin", "challenge", "${encoded}", "${this.serverToken}", "${this.clientId}"]`
+    );
   }
 
-  protected init(loginMsgId: string, restoreSession: boolean) {
-    return async (e: WebSocket.OpenEvent) => {
-      if (
-        !restoreSession ||
-        (restoreSession && !(await doesFileExist(this.keysPath!)))
-      ) {
-        this.clientId = crypto.randomBytes(16).toString("base64");
-      } else {
-        await this.getKeys();
-      }
-
-      e.target.send(
-        `${loginMsgId},["admin","init",[0,4,2080],["WhatsApp forwarder","WhatsAppForwarder","0.1.0"],"${this.clientId}",true]`
-      );
-
-      if (restoreSession && (await doesFileExist(this.keysPath!))) {
-        this.restoreSession(loginMsgId);
-      }
-    };
+  public disconnect() {
+    this.apiSocket.send(`goodbye,,["admin","Conn","disconnect"]`);
   }
 }

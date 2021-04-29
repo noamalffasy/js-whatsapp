@@ -276,7 +276,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
       content: [content],
     };
 
-    await this.apiClient.sendProto(msgData, id, "PIC");
+    await this.apiClient.encryptAndSendNode(msgData, id, "PIC");
 
     return { id, content };
   }
@@ -503,7 +503,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
       await this.apiClient
         .sendSocketAsync(
           msgId,
-          `${msgId},["query", "ProfilePicThumb", "${jid}"]`
+          JSON.stringify(["query", "ProfilePicThumb", jid])
         )
         .then(async (data: WhatsAppProfilePicPayload) => {
           if (data.eurl) {
