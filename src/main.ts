@@ -17,6 +17,7 @@ import {
   WAReceiveMedia,
 } from "./types";
 import { WANode } from "./binary/reader";
+import { sendMediaMessage, sendQuotedMediaMessage } from "./media";
 
 interface WAListeners {
   node: (node: WANode) => void;
@@ -330,56 +331,8 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     );
   }
 
-  /**
-   * Sends a media message to a wanted chat JID
-   * @param {Parameters<WhatsApp["sendMediaMessage"]>[0]} mediaObj The media object to send
-   * @param {Parameters<WhatsApp["sendMediaMessage"]>[1]} remoteJid The chat JID to send to
-   */
-  public async sendMediaMessage(
-    mediaObj: Parameters<WABaseClient["encryptMedia"]>[0],
-    remoteJid: string
-  ): Promise<{ id: string; content: WAMessage }> {
-    const nextId = randHex(12).toUpperCase();
-    const mediaProto = await this.apiClient.encryptMedia(mediaObj);
-    const media = await this.apiClient.sendMediaProto({
-      remoteJid,
-      mediaFile: (mediaProto[
-        (mediaObj.msgType + "Message") as
-          | "imageMessage"
-          | "stickerMessage"
-          | "videoMessage"
-          | "audioMessage"
-          | "documentMessage"
-      ]! as unknown) as WAMedia,
-      msgType: mediaObj.msgType,
-      msgId: nextId,
-      mentionedJids:
-        "caption" in mediaObj ? mediaObj.caption.mentionedJids : undefined,
-    });
-
-    return { id: nextId, content: media.content };
-  }
-
-  /**
-   * Sends a quoted media message to a wanted chat JID
-   * @param {Parameters<WhatsApp["sendQuotedMediaMessage"]>[0]} mediaObj The media object to send
-   * @param {Parameters<WhatsApp["sendQuotedMediaMessage"]>[1]} remoteJid The chat JID to send to
-   * @param {Parameters<WhatsApp["sendQuotedMediaMessage"]>[2]} quotedInfo The info needed for quoting a message
-   */
-  public async sendQuotedMediaMessage(
-    mediaObj: Parameters<WhatsApp["sendMediaMessage"]>[0],
-    remoteJid: Parameters<WhatsApp["sendMediaMessage"]>[1],
-    quotedInfo: Parameters<WABaseClient["sendQuotedMessage"]>[2]
-  ): Promise<{ id: string; content: WAMessage }> {
-    const media = await this.apiClient.encryptMedia(mediaObj);
-
-    return await this.apiClient.sendQuotedMessage(
-      media,
-      remoteJid,
-      quotedInfo,
-      "caption" in mediaObj ? mediaObj.caption.mentionedJids : undefined
-    );
-  }
+  public sendMediaMessage = sendMediaMessage;
+  public sendQuotedMediaMessage = sendQuotedMediaMessage;
 
   /**
    * Sends a contact (in VCard format) to a wanted chat JID
