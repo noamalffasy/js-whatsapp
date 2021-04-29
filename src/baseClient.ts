@@ -624,28 +624,19 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     msgId: string;
     mentionedJids?: WAContextInfo["mentionedJid"];
   }) {
-    if (!mediaProto.mentionedJids) {
-      return await this.sendMessage(
-        {
-          [mediaProto.msgType + "Message"]: mediaProto.mediaFile,
-        },
-        mediaProto.remoteJid,
-        mediaProto.msgId
-      );
-    } else {
-      return await this.sendMessage(
-        {
-          [mediaProto.msgType + "Message"]: {
-            ...mediaProto.mediaFile,
-            contextInfo: {
-              mentionedJid: mediaProto.mentionedJids,
-            },
-          },
-        },
-        mediaProto.remoteJid,
-        mediaProto.msgId
-      );
+    let node: WAMessage = {
+      [mediaProto.msgType + "Message"]: mediaProto.mediaFile,
+    };
+
+    if (mediaProto.mentionedJids) {
+      type msg = `${WAMediaTypes}Message`;
+
+      node[`${mediaProto.msgType}Message` as msg]!.contextInfo = {
+        mentionedJid: mediaProto.mentionedJids,
+      };
     }
+
+    return await this.sendMessage(node, mediaProto.remoteJid, mediaProto.msgId);
   }
 
   async decryptMedia(
