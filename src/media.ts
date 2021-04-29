@@ -1,6 +1,6 @@
 import WABaseClient from "./baseClient";
 import WhatsApp from "./main";
-import { WAMessage, WAMedia } from "./types";
+import { WAMessage, WAMedia, WAMediaTypes } from "./types";
 import { randHex } from "./utils/encryption";
 
 /**
@@ -23,12 +23,7 @@ export async function sendMediaMessage(
   const media = await this.apiClient.sendMediaProto({
     remoteJid,
     mediaFile: (mediaProto[
-      (mediaObj.msgType + "Message") as
-        | "imageMessage"
-        | "stickerMessage"
-        | "videoMessage"
-        | "audioMessage"
-        | "documentMessage"
+      (mediaObj.msgType + "Message") as `${WAMediaTypes}Message`
     ]! as unknown) as WAMedia,
     msgType: mediaObj.msgType,
     msgId: nextId,
