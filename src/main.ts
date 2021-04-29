@@ -127,38 +127,17 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
           msg.key.name = chat.name;
         }
 
-        if (msg.message.stickerMessage) {
+        const mediaType = Object.keys(msg.message)
+          .find((key) => key.endsWith("Message"))
+          ?.replace("Message", "") as WAMediaTypes | undefined;
+
+        if (mediaType) {
           msg.message.decryptedMediaMessage = await this.apiClient
             .decryptMedia(
-              msg.message.stickerMessage as WAReceiveMedia,
-              "sticker"
-            )
-            .catch((err) => {
-              throw err;
-            });
-        } else if (msg.message.imageMessage) {
-          msg.message.decryptedMediaMessage = await this.apiClient
-            .decryptMedia(msg.message.imageMessage as WAReceiveMedia, "image")
-            .catch((err) => {
-              throw err;
-            });
-        } else if (msg.message.videoMessage) {
-          msg.message.decryptedMediaMessage = await this.apiClient
-            .decryptMedia(msg.message.videoMessage as WAReceiveMedia, "video")
-            .catch((err) => {
-              throw err;
-            });
-        } else if (msg.message.audioMessage) {
-          msg.message.decryptedMediaMessage = await this.apiClient
-            .decryptMedia(msg.message.audioMessage as WAReceiveMedia, "audio")
-            .catch((err) => {
-              throw err;
-            });
-        } else if (msg.message.documentMessage) {
-          msg.message.decryptedMediaMessage = await this.apiClient
-            .decryptMedia(
-              msg.message.documentMessage as WAReceiveMedia,
-              "document"
+              msg.message[
+                `${mediaType}Message` as `${WAMediaTypes}Message`
+              ] as WAReceiveMedia,
+              mediaType
             )
             .catch((err) => {
               throw err;
