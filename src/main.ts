@@ -51,7 +51,6 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
 
     this.apiClient.on("node", (node) => {
       this.handleNodes(node);
-      this.emit("node", node);
     });
     this.apiClient.on("qrCode", () => this.emit("qrCode"));
     this.apiClient.on("ready", () => {
@@ -107,11 +106,6 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
         if (contact) {
           msg.author = contact.name ?? contact.vname ?? contact.notify;
         }
-        }
-
-        const chat = this.chatList.find(
-          (chat) => chat.jid.replace("\0", "") === remoteJid
-        );
 
         if (chat) {
           msg.key.name = chat.name;
