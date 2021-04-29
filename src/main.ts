@@ -93,30 +93,20 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
           "@s.whatsapp.net",
           "@c.us"
         );
+        const userJid = (msg.participant ?? msg.key.remoteJid)?.replace(
+          "s.whatsapp.net",
+          "c.us"
+        );
+        const contact = this.contactList.find(
+          (contact) => contact.jid.replace("\0", "") === userJid
+        );
+        const chat = this.chatList.find(
+          (chat) => chat.jid.replace("\0", "") === remoteJid
+        );
 
-        if (msg.participant) {
-          const userJid = msg.participant.replace("@s.whatsapp.net", "@c.us");
-          const contact = this.contactList.find(
-            (contact) => contact.jid.replace("\0", "") === userJid
-          );
-
-          if (contact) {
-            msg.author = contact.name
-              ? contact.name
-              : contact.vname || contact.notify;
-          }
-        } else {
-          const userJid = msg.key.remoteJid!.replace(
-            "@s.whatsapp.net",
-            "@c.us"
-          );
-          const contact = this.contactList.find(
-            (contact) => contact.jid.replace("\0", "") === userJid
-          );
-
-          if (contact) {
-            msg.author = contact.name ?? contact.vname ?? contact.notify;
-          }
+        if (contact) {
+          msg.author = contact.name ?? contact.vname ?? contact.notify;
+        }
         }
 
         const chat = this.chatList.find(
