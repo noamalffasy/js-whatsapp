@@ -16,7 +16,6 @@ import {
   WhatsAppConnPayload,
   WhatsAppStreamPayload,
   WhatsAppPropsPayload,
-  WhatsAppUploadMediaURL,
   WAReceiveMedia,
   WhatsAppAdminTestPayload,
   WAMessage,
