@@ -26,6 +26,7 @@ import {
   WhatsAppMediaConnPayload,
   WAMedia,
   WADecryptedMedia,
+  WAMediaTypes
 } from "./types";
 import { doesFileExist } from "./utils/path";
 import {
@@ -618,7 +619,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
   async sendMediaProto(mediaProto: {
     mediaFile: WAMedia;
-    msgType: string;
+    msgType: WAMediaTypes;
     remoteJid: string;
     msgId: string;
     mentionedJids?: WAContextInfo["mentionedJid"];
@@ -649,7 +650,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
   async decryptMedia(
     mediaObj: WAReceiveMedia,
-    type: "image" | "sticker" | "video" | "audio" | "document"
+    type: WAMediaTypes
   ): Promise<WADecryptedMedia> {
     const mediaKey = Uint8Array.from(Buffer.from(mediaObj.mediaKey, "base64"));
     const mediaKeyExpanded = HKDF(mediaKey, 112, WAMediaAppInfo[type]);

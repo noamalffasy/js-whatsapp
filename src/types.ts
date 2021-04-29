@@ -116,8 +116,10 @@ export interface WAContact {
   notify?: string;
 }
 
+export type WAMediaTypes = "image" | "sticker" | "video" | "audio" | "document";
+
 export interface WADecryptedMedia {
-  type: "image" | "sticker" | "video" | "document" | "audio";
+  type: WAMediaTypes;
   buffer: Buffer;
   gifPlayback: boolean;
   caption?: string;
