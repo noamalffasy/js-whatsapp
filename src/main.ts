@@ -7,14 +7,13 @@ import WABaseClient from "./baseClient";
 import {
   WhatsAppGroupMetadataPayload,
   WAContextInfo,
-  WAMessage,
-  WAMedia,
   WhatsAppProfilePicPayload,
   WAChat,
   WAContact,
   WAWebMessage,
   WAStubMessage,
   WAReceiveMedia,
+  WAMediaTypes,
 } from "./types";
 import { WANode } from "./binary/reader";
 import { sendMediaMessage, sendQuotedMediaMessage } from "./media";
