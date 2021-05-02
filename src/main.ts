@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import qrcode from "qrcode";
 import { TypedEmitter } from "tiny-typed-emitter";
 
 import { randHex } from "./utils/encryption";
@@ -26,7 +27,7 @@ interface WAListeners {
   noNetwork: () => void;
   loggedOut: () => void;
   ready: () => void;
-  qrCode: () => void;
+  qrCode: (dataUrl: string) => void;
 }
 
 export default class WhatsApp extends TypedEmitter<WAListeners> {
@@ -38,8 +39,9 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
   contactList: WAContact[] = [];
 
   constructor(
-    opts: ConstructorParameters<typeof WABaseClient>[0] = {
-      qrPath: "./qrcode.png",
+    opts: ConstructorParameters<typeof WABaseClient>[0] & {
+      qrPath?: string;
+    } = {
       restoreSession: false,
       keysPath: "./keys.json",
       clientInfo: {
@@ -57,7 +59,12 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     this.apiClient.on("node", (node) => {
       this.handleNodes(node);
     });
-    this.apiClient.on("qrCode", () => this.emit("qrCode"));
+    this.apiClient.on("qrCode", async data => {
+      if (opts.qrPath) {
+        await qrcode.toFile(opts.qrPath, data);
+      }
+      this.emit("qrCode", await qrcode.toDataURL(data));
+    });
     this.apiClient.on("ready", () => {
       this.emit("ready");
     });

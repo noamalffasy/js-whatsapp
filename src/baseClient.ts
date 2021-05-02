@@ -5,7 +5,6 @@ import sharp from "sharp";
 import fetch from "node-fetch";
 import WebSocket from "ws";
 import crypto from "crypto";
-import qrcode from "qrcode";
 import { generateKeyPair, sharedKey } from "curve25519-js";
 import { TypedEmitter } from "tiny-typed-emitter";
 
@@ -36,7 +35,6 @@ import {
   AESEncrypt,
   HKDF,
   Sha256,
-  dataUrlToBuffer,
 } from "./utils/encryption";
 import { arraysEqual, concatIntArray } from "./utils/arrays";
 import { whatsappReadBinary, WANode } from "./binary/reader";
@@ -56,7 +54,7 @@ interface WAListeners {
   loggedOut: () => void;
   ready: () => void;
   myWid: (wid: string) => void;
-  qrCode: () => void;
+  qrCode: (qrCodeData: string) => void;
 }
 
 interface ClientInfo {
@@ -69,7 +67,6 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
   protected apiSocket: WebSocket;
 
   protected keysPath?: string;
-  protected qrPath: string;
   protected clientId?: string;
 
   public myWid?: string;
@@ -94,12 +91,10 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
   constructor(
     opts: {
-      qrPath: string;
       restoreSession: boolean;
       keysPath: string;
       clientInfo: ClientInfo;
     } = {
-      qrPath: "./qrcode.png",
       restoreSession: false,
       keysPath: "./keys.json",
       clientInfo: {
@@ -116,8 +111,6 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     });
 
     this.keyPair = null;
-
-    this.qrPath = resolvePath(".", opts.qrPath);
 
     if (opts.restoreSession) {
       this.keysPath = resolvePath(".", opts.keysPath);
@@ -191,14 +184,9 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
   protected async setupQrCode(ref: string) {
     this.keyPair = generateKeyPair(Uint8Array.from(crypto.randomBytes(32)));
     const publicKeyBase64 = Buffer.from(this.keyPair.public).toString("base64");
-    const qrCode = dataUrlToBuffer(
-      await qrcode.toDataURL(`${ref},${publicKeyBase64},${this.clientId}`)
-    );
+    const qrCodeData = `${ref},${publicKeyBase64},${this.clientId}`;
 
-    writeFile(this.qrPath, qrCode.data, (err) => {
-      if (err) console.error(err);
-      this.emit("qrCode");
-    });
+    this.emit("qrCode", qrCodeData);
   }
 
   private handleLoginPayload(data: WhatsAppConnPayload) {
