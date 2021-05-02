@@ -153,7 +153,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           "admin",
           "init",
           [0, 4, 2080],
-          Object.values(clientInfo),
+          [clientInfo.browser, clientInfo.os, clientInfo.osVersion],
           this.clientId,
           true,
         ])
