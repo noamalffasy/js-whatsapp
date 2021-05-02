@@ -38,10 +38,15 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
   contactList: WAContact[] = [];
 
   constructor(
-    opts: { qrPath: string; restoreSession: boolean; keysPath: string } = {
+    opts: ConstructorParameters<typeof WABaseClient>[0] = {
       qrPath: "./qrcode.png",
       restoreSession: false,
       keysPath: "./keys.json",
+      clientInfo: {
+        os: "Node.js",
+        browser: "WhatsApp Bot",
+        osVersion: "1.0.0",
+      },
     }
   ) {
     super();

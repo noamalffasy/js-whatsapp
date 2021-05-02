@@ -59,6 +59,12 @@ interface WAListeners {
   qrCode: () => void;
 }
 
+interface ClientInfo {
+  os: string;
+  browser: string;
+  osVersion: string;
+}
+
 export default class WABaseClient extends TypedEmitter<WAListeners> {
   protected apiSocket: WebSocket;
 
@@ -87,10 +93,20 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
   } = {};
 
   constructor(
-    opts: { qrPath: string; restoreSession: boolean; keysPath: string } = {
+    opts: {
+      qrPath: string;
+      restoreSession: boolean;
+      keysPath: string;
+      clientInfo: ClientInfo;
+    } = {
       qrPath: "./qrcode.png",
       restoreSession: false,
       keysPath: "./keys.json",
+      clientInfo: {
+        os: "Node.js",
+        browser: "WhatsApp Bot",
+        osVersion: "1.0.0",
+      },
     }
   ) {
     super();
@@ -107,12 +123,20 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       this.keysPath = resolvePath(".", opts.keysPath);
     }
 
-    this.init(opts.restoreSession);
+    this.init({
+      restoreSession: opts.restoreSession,
+      clientInfo: opts.clientInfo,
+    });
 
     this.apiSocket.onmessage = this.onSocketMessage;
   }
 
-  protected async init(restoreSession: boolean) {
+  protected async init(opts: {
+    restoreSession: boolean;
+    clientInfo: ClientInfo;
+  }) {
+    const { restoreSession, clientInfo } = opts;
+
     const loginMsgId = "" + Date.now();
     const doKeysExist = await doesFileExist(this.keysPath!);
 
@@ -129,7 +153,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           "admin",
           "init",
           [0, 4, 2080],
-          ["WhatsApp forwarder", "WhatsAppForwarder", "0.1.0"],
+          Object.values(clientInfo),
           this.clientId,
           true,
         ])
