@@ -116,6 +116,8 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       this.keysPath = resolvePath(".", opts.keysPath);
     }
 
+    this.apiSocket.onmessage = this.onSocketMessage.bind(this);
+
     this.init({
       restoreSession: opts.restoreSession,
       clientInfo: opts.clientInfo,
