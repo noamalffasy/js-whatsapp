@@ -260,11 +260,13 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     return new Promise((resolve) => {
       const encoder = new TextEncoder();
       this.apiSocket.send(
-        concatIntArray(
-          encoder.encode(messageTag),
-          encoder.encode(","),
-          data instanceof Uint8Array ? data : encoder.encode(data)
-        )
+        typeof data === "string"
+          ? `${messageTag},${data}`
+          : concatIntArray(
+              encoder.encode(messageTag),
+              encoder.encode(","),
+              data instanceof Uint8Array ? data : encoder.encode(data)
+            )
       );
 
       this.addMessageListener(async (e) => {
