@@ -177,8 +177,6 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
           .find((key) => key.endsWith("Message"))
           ?.replace("Message", "") as WAMediaTypes | undefined;
 
-        console.log(mediaType);
-
         if (
           mediaType &&
           ["image", "sticker", "video", "audio", "document"].includes(mediaType)
