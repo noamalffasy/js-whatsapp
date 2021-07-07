@@ -248,7 +248,21 @@ export const WASingleByteTokens = [
   "color",
   "call",
   "offer",
-  "call-id"
+  "call-id",
+  "quick_reply",
+  "sticker",
+  "pay_t",
+  "accept",
+  "reject",
+  "sticker_pack",
+  "invalid",
+  "canceled",
+  "missed",
+  "connected",
+  "result",
+  "audio",
+  "video",
+  "recent",
 ];
 export const WADoubleByteTokens = [];
 
