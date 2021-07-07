@@ -75,12 +75,25 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
       restoreSession: boolean;
     }
   ) {
+    interface FileKeys extends Omit<Omit<WAKeys, "macKey">, "encKey"> {
+      macKey: Record<string, number>;
+      encKey: Record<string, number>;
+    }
+
+    const keys =
+      opts.keysPath && opts.restoreSession
+        ? (Object.entries(JSON.parse(await readFile(opts.keysPath)) as FileKeys)
+            .map(([key, val]) => ({
+              [key]: key.endsWith("Key")
+                ? Uint8Array.from(Object.values(val))
+                : val,
+            }))
+            .reduce((val, obj) => ({ ...obj, ...val }), {}) as WAKeys)
+        : null;
+
     this._apiClient = new WABaseClient({
       ...opts,
-      keys:
-        opts.keysPath && opts.restoreSession
-          ? (JSON.parse(await readFile(opts.keysPath)) as WAKeys)
-          : null,
+      keys,
     });
 
     this.apiClient.on("node", (node) => {
