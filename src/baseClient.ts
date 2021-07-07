@@ -98,21 +98,11 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     [key: string]: (e: WebSocket.MessageEvent) => void;
   } = {};
 
-  constructor(
-    opts: {
-      restoreSession: boolean;
-      keys: WAKeys | null;
-      clientInfo: WAClientInfo;
-    } = {
-      restoreSession: false,
-      keys: null,
-      clientInfo: {
-        os: "Node.js",
-        browser: "WhatsApp Bot",
-        osVersion: "1.0.0",
-      },
-    }
-  ) {
+  constructor(opts: {
+    restoreSession: boolean;
+    keys: WAKeys | null;
+    clientInfo: WAClientInfo;
+  }) {
     super();
 
     this.apiSocket = new WebSocket("wss://web.whatsapp.com/ws", {
