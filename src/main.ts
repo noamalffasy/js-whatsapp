@@ -97,7 +97,9 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     });
 
     this.apiClient.on("node", (node) => {
-      this.handleNodes(node);
+      this.handleNodes(node).catch((err) => {
+        console.error(err);
+      });
     });
     this.apiClient.on("keys", (keys) => {
       if (opts.keysPath) {
@@ -175,7 +177,12 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
           .find((key) => key.endsWith("Message"))
           ?.replace("Message", "") as WAMediaTypes | undefined;
 
-        if (mediaType) {
+        console.log(mediaType);
+
+        if (
+          mediaType &&
+          ["image", "sticker", "video", "audio", "document"].includes(mediaType)
+        ) {
           msg.message.decryptedMediaMessage = await this.apiClient
             .decryptMedia(
               msg.message[

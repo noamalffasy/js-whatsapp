@@ -680,6 +680,9 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       .then((res) => res.arrayBuffer())
       .then((arrayBuffer) => Buffer.from(arrayBuffer))
       .then((buffer) => Uint8Array.from(buffer));
+
+    if (rawFile.length === 0) throw new Error("Media not found");
+
     const file = rawFile.slice(0, rawFile.length - 10);
     const mac = rawFile.slice(rawFile.length - 10);
 
