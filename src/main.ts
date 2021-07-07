@@ -77,9 +77,10 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
   ) {
     this._apiClient = new WABaseClient({
       ...opts,
-      keys: opts.keysPath
-        ? (JSON.parse(await readFile(opts.keysPath)) as WAKeys)
-        : null,
+      keys:
+        opts.keysPath && opts.restoreSession
+          ? (JSON.parse(await readFile(opts.keysPath)) as WAKeys)
+          : null,
     });
 
     this.apiClient.on("node", (node) => {
