@@ -152,7 +152,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     restoreSession: boolean;
     clientInfo: WAClientInfo;
   }) {
-    const loginMsgId = "" + Date.now();
+    const loginMsgId = `${Math.round(Date.now() / 1000)}.--0`;
 
     if (!restoreSession || (restoreSession && !this.clientId)) {
       this.clientId = crypto.randomBytes(16).toString("base64");
