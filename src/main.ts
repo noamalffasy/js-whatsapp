@@ -42,7 +42,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
   contactList: WAContact[] = [];
 
   constructor(
-    opts: ConstructorParameters<typeof WABaseClient>[0] & {
+    opts: Partial<ConstructorParameters<typeof WABaseClient>[0]> & {
       qrPath?: string;
       keysPath?: string;
     } = {
@@ -60,11 +60,19 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
 
     this.apiClient = new WABaseClient();
 
-    this.init(opts);
+    this.init(
+      opts as Required<ConstructorParameters<typeof WABaseClient>[0]> & {
+        qrPath?: string;
+        keysPath?: string;
+      }
+    );
   }
 
   protected async init(
-    opts: ConstructorParameters<typeof WhatsApp>[0] & {
+    opts: Required<ConstructorParameters<typeof WABaseClient>[0]> & {
+      qrPath?: string;
+      keysPath?: string;
+    } & {
       restoreSession: boolean;
     }
   ) {
@@ -117,16 +125,16 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     for (const node of allNodes.content as WANode[]) {
       if (
         node.description === "user" &&
-        ((node.attributes as unknown) as WAContact).jid.endsWith("c.us")
+        (node.attributes as unknown as WAContact).jid.endsWith("c.us")
       ) {
-        this.contactList.push((node.attributes as unknown) as WAContact);
+        this.contactList.push(node.attributes as unknown as WAContact);
       } else if (
         node.description === "chat" &&
-        ((node.attributes as unknown) as WAChat).jid.endsWith("g.us")
+        (node.attributes as unknown as WAChat).jid.endsWith("g.us")
       ) {
-        this.chatList.push((node.attributes as unknown) as WAChat);
-      } else if (((node as unknown) as WAWebMessage).message) {
-        const msg = (node as unknown) as WAWebMessage;
+        this.chatList.push(node.attributes as unknown as WAChat);
+      } else if ((node as unknown as WAWebMessage).message) {
+        const msg = node as unknown as WAWebMessage;
         const remoteJid = msg.key!.remoteJid!.replace(
           "@s.whatsapp.net",
           "@c.us"
@@ -168,8 +176,8 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
         }
 
         this.emit("message", msg, allNodes.description);
-      } else if (((node as unknown) as WAStubMessage).messageStubType) {
-        const msg = (node as unknown) as WAStubMessage;
+      } else if ((node as unknown as WAStubMessage).messageStubType) {
+        const msg = node as unknown as WAStubMessage;
 
         if (
           msg.messageStubType === "GROUP_PARTICIPANT_ADD" &&
