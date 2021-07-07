@@ -1,23 +1,25 @@
+import { writeFile } from "fs";
 import fetch from "node-fetch";
 import qrcode from "qrcode";
 import { TypedEmitter } from "tiny-typed-emitter";
 
-import { randHex } from "./utils/encryption";
+import WABaseClient, { WAKeys } from "./baseClient";
+import { WANode } from "./binary/reader";
 import { WAMessageNode } from "./binary/writer";
-import WABaseClient from "./baseClient";
+import { sendMediaMessage, sendQuotedMediaMessage } from "./media";
 import {
-  WhatsAppGroupMetadataPayload,
-  WAContextInfo,
-  WhatsAppProfilePicPayload,
   WAChat,
   WAContact,
-  WAWebMessage,
-  WAStubMessage,
-  WAReceiveMedia,
+  WAContextInfo,
   WAMediaTypes,
+  WAReceiveMedia,
+  WAStubMessage,
+  WAWebMessage,
+  WhatsAppGroupMetadataPayload,
+  WhatsAppProfilePicPayload,
 } from "./types";
-import { WANode } from "./binary/reader";
-import { sendMediaMessage, sendQuotedMediaMessage } from "./media";
+import { randHex } from "./utils/encryption";
+import { readFile } from "./utils/path";
 
 interface WAListeners {
   node: (node: WANode) => void;
@@ -27,6 +29,7 @@ interface WAListeners {
   noNetwork: () => void;
   loggedOut: () => void;
   ready: () => void;
+  keys: (keys: WAKeys) => void;
   qrCode: (dataUrl: string) => void;
 }
 
@@ -41,8 +44,10 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
   constructor(
     opts: ConstructorParameters<typeof WABaseClient>[0] & {
       qrPath?: string;
+      keysPath?: string;
     } = {
       restoreSession: false,
+      keys: null,
       keysPath: "./keys.json",
       clientInfo: {
         os: "Node.js",
@@ -53,13 +58,35 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
   ) {
     super();
 
-    this.apiClient = new WABaseClient(opts);
-    this.myWid = this.apiClient.myWid;
+    this.apiClient = new WABaseClient();
+
+    this.init(opts);
+  }
+
+  protected async init(
+    opts: ConstructorParameters<typeof WhatsApp>[0] & {
+      restoreSession: boolean;
+    }
+  ) {
+    this.apiClient = new WABaseClient({
+      ...opts,
+      keys: opts.keysPath
+        ? (JSON.parse(await readFile(opts.keysPath)) as WAKeys)
+        : null,
+    });
 
     this.apiClient.on("node", (node) => {
       this.handleNodes(node);
     });
-    this.apiClient.on("qrCode", async data => {
+    this.apiClient.on("keys", (keys) => {
+      if (opts.keysPath) {
+        writeFile(opts.keysPath, JSON.stringify(keys), "utf8", (err) => {
+          if (err) console.error(err);
+        });
+      }
+      this.emit("keys", keys);
+    });
+    this.apiClient.on("qrCode", async (data) => {
       if (opts.qrPath) {
         await qrcode.toFile(opts.qrPath, data);
       }

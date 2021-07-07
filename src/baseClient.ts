@@ -46,6 +46,20 @@ import {
   WAMediaAppInfo,
 } from "./binary/tokens";
 
+interface WAClientInfo {
+  os: string;
+  browser: string;
+  osVersion: string;
+}
+
+export interface WAKeys {
+  clientId: string;
+  clientToken: string;
+  serverToken: string;
+  macKey: Uint8Array;
+  encKey: Uint8Array;
+}
+
 interface WAListeners {
   node: (node: WANode) => void;
   message: (msg: WAWebMessage, description: string) => void;
@@ -54,19 +68,13 @@ interface WAListeners {
   loggedOut: () => void;
   ready: () => void;
   myWid: (wid: string) => void;
+  keys: (keys: WAKeys) => void;
   qrCode: (qrCodeData: string) => void;
-}
-
-interface ClientInfo {
-  os: string;
-  browser: string;
-  osVersion: string;
 }
 
 export default class WABaseClient extends TypedEmitter<WAListeners> {
   protected apiSocket: WebSocket;
 
-  protected keysPath?: string;
   protected clientId?: string;
 
   public myWid?: string;
@@ -76,7 +84,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
   protected keyPair: {
     public: Uint8Array;
     private: Uint8Array;
-  } | null;
+  } | null = null;
 
   protected clientToken: string | null = null;
   protected serverToken: string | null = null;
@@ -92,11 +100,11 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
   constructor(
     opts: {
       restoreSession: boolean;
-      keysPath: string;
-      clientInfo: ClientInfo;
+      keys: WAKeys | null;
+      clientInfo: WAClientInfo;
     } = {
       restoreSession: false,
-      keysPath: "./keys.json",
+      keys: null,
       clientInfo: {
         os: "Node.js",
         browser: "WhatsApp Bot",
@@ -110,10 +118,20 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       headers: { Origin: "https://web.whatsapp.com" },
     });
 
-    this.keyPair = null;
+    if (opts.keys && opts.restoreSession) {
+      Object.entries(opts.keys).forEach(
+        ([key, val]) => !val && console.error(`Missing value for '${key}'`)
+      );
 
-    if (opts.restoreSession) {
-      this.keysPath = resolvePath(".", opts.keysPath);
+      const { clientId, clientToken, serverToken, macKey, encKey } = opts.keys;
+
+      this.clientId = clientId;
+      this.clientToken = clientToken;
+      this.serverToken = serverToken;
+      this.macKey = macKey;
+      this.encKey = encKey;
+    } else if (opts.restoreSession) {
+      console.error("Keys are needed for restoring a session");
     }
 
     this.apiSocket.onmessage = this.onSocketMessage.bind(this);
@@ -122,23 +140,18 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       restoreSession: opts.restoreSession,
       clientInfo: opts.clientInfo,
     });
-
-    this.apiSocket.onmessage = this.onSocketMessage;
   }
 
   protected async init(opts: {
     restoreSession: boolean;
-    clientInfo: ClientInfo;
+    clientInfo: WAClientInfo;
   }) {
     const { restoreSession, clientInfo } = opts;
 
     const loginMsgId = "" + Date.now();
-    const doKeysExist = await doesFileExist(this.keysPath!);
 
-    if (!restoreSession || (restoreSession && !doKeysExist)) {
+    if (!restoreSession || (restoreSession && !this.clientId)) {
       this.clientId = crypto.randomBytes(16).toString("base64");
-    } else {
-      await this.getKeys();
     }
 
     this.apiSocket.on("open", async () => {
@@ -154,7 +167,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
         ])
       );
 
-      if (restoreSession && doKeysExist) {
+      if (restoreSession && this.clientId) {
         this.restoreSession(loginMsgId);
       } else {
         if (!this.clientToken) {
@@ -198,10 +211,6 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
     setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
-    if (this.keysPath) {
-      this.saveKeys();
-    }
-
     // Login
     if (data[1].secret) {
       this.setupEncryptionKeys(data as WhatsAppConnPayload);
@@ -212,6 +221,14 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       this.clientToken = clientToken;
       this.serverToken = serverToken;
     }
+
+    this.emit("keys", {
+      clientId: this.clientId!,
+      clientToken: this.clientToken!,
+      serverToken: this.serverToken!,
+      macKey: this.macKey,
+      encKey: this.encKey,
+    });
   }
 
   protected setupEncryptionKeys(data: WhatsAppConnPayload) {
@@ -307,44 +324,6 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
       this.emit("node", node);
     }
-  }
-
-  protected saveKeys() {
-    writeFile(
-      this.keysPath!,
-      JSON.stringify({
-        clientId: this.clientId,
-        clientToken: this.clientToken,
-        serverToken: this.serverToken,
-        macKey: Array.from(this.macKey),
-        encKey: Array.from(this.encKey),
-      }),
-      (err) => console.error(err)
-    );
-  }
-
-  protected async getKeys(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      readFile(this.keysPath!, "utf-8", (err, data) => {
-        if (err) reject(err);
-
-        const {
-          clientId,
-          clientToken,
-          serverToken,
-          macKey,
-          encKey,
-        } = JSON.parse(data);
-
-        this.encKey = Uint8Array.from(encKey);
-        this.macKey = Uint8Array.from(macKey);
-        this.clientId = clientId;
-        this.clientToken = clientToken;
-        this.serverToken = serverToken;
-
-        resolve();
-      });
-    });
   }
 
   protected keepAlive() {
