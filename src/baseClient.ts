@@ -534,7 +534,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           msgType: "image";
           mimetype: string;
           file: Buffer;
-          caption: {
+          caption?: {
             text: string;
             mentionedJids?: WAContextInfo["mentionedJid"];
           };
@@ -548,7 +548,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           msgType: "video";
           mimetype: string;
           file: Buffer;
-          caption: {
+          caption?: {
             text: string;
             mentionedJids?: WAContextInfo["mentionedJid"];
           };
@@ -590,7 +590,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     const mediaObj: WAMedia = {
       mimetype: _mediaObj.mimetype,
       mediaKey,
-      caption: "caption" in _mediaObj ? _mediaObj.caption.text : undefined,
+      caption: "caption" in _mediaObj ? _mediaObj.caption!.text : undefined,
       url: "",
       fileSha256,
       fileEncSha256,
