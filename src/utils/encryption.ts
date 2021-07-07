@@ -1,8 +1,18 @@
 import crypto from "crypto";
+import { Readable } from "stream";
 
 import { concatIntArray } from "./arrays";
 
 const AES_BLOCK_SIZE = 16;
+
+export function uintArrayToStream(binary: Uint8Array) {
+  return new Readable({
+    read() {
+      this.push(binary);
+      this.push(null);
+    },
+  });
+}
 
 export function dataUrlToBuffer(dataString: string) {
   const matches = dataString.match(
@@ -35,14 +45,10 @@ export function randHex(n: number) {
       q = (n - r) / 8,
       i;
     for (i = 0; i < q; i++) {
-      rs += Math.random()
-        .toString(16)
-        .slice(2);
+      rs += Math.random().toString(16).slice(2);
     }
     if (r > 0) {
-      rs += Math.random()
-        .toString(16)
-        .slice(2, i);
+      rs += Math.random().toString(16).slice(2, i);
     }
   }
   return rs;
@@ -79,7 +85,7 @@ export function AESDecrypt(key: Uint8Array, cipherbits: Uint8Array) {
   prp.setAutoPadding(false);
   const decrypted = Buffer.concat([
     prp.update(cipherbits.slice(AES_BLOCK_SIZE)),
-    prp.final()
+    prp.final(),
   ]);
 
   return Uint8Array.from(decrypted);
@@ -107,20 +113,12 @@ export function HmacSha256(
   signBits: Uint8Array
 ): Uint8Array {
   return Uint8Array.from(
-    crypto
-      .createHmac("sha256", keyBits)
-      .update(signBits)
-      .digest()
+    crypto.createHmac("sha256", keyBits).update(signBits).digest()
   );
 }
 
 export function Sha256(signBits: Uint8Array) {
-  return Uint8Array.from(
-    crypto
-      .createHash("sha256")
-      .update(signBits)
-      .digest()
-  );
+  return Uint8Array.from(crypto.createHash("sha256").update(signBits).digest());
 }
 
 export function HKDF(

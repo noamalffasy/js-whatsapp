@@ -35,6 +35,7 @@ import {
   AESEncrypt,
   HKDF,
   Sha256,
+  uintArrayToStream,
 } from "./utils/encryption";
 import { arraysEqual, concatIntArray } from "./utils/arrays";
 import { whatsappReadBinary, WANode } from "./binary/reader";
@@ -492,19 +493,15 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
   async getMediaConnectionData(): Promise<
     WhatsAppMediaConnPayload["media_conn"]
   > {
-    return new Promise(async (resolve) => {
-      const messageTag = randHex(12).toUpperCase();
-      await this.sendSocketAsync(
-        messageTag,
-        JSON.stringify(["query", "mediaConn"])
-      ).then(async (data: WhatsAppMediaConnPayload) => {
-        resolve({
-          hosts: data.media_conn.hosts,
-          auth: data.media_conn.auth,
-          ttl: data.media_conn.ttl,
-        });
-      });
-    });
+    const messageTag = randHex(12).toUpperCase();
+    return await this.sendSocketAsync(
+      messageTag,
+      JSON.stringify(["query", "mediaConn"])
+    ).then(async (data: WhatsAppMediaConnPayload) => ({
+      hosts: data.media_conn.hosts,
+      auth: data.media_conn.auth,
+      ttl: data.media_conn.ttl,
+    }));
   }
 
   async uploadMedia(
@@ -521,7 +518,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       const res: WhatsAppMediaUploadPayload = await fetch(
         `https://${hostname}${uploadPath}`,
         {
-          body,
+          body: uintArrayToStream(body),
           method: "POST",
           headers: {
             Origin: "https://web.whatsapp.com",
@@ -627,7 +624,11 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
     const media = await this.uploadMedia(
       type,
-      Buffer.from(fileEncSha256).toString("base64"),
+      Buffer.from(fileEncSha256)
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/\=+$/, ""),
       concatIntArray(enc, mac)
     );
 
