@@ -120,9 +120,11 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     });
 
     if (opts.keys && opts.restoreSession) {
-      Object.entries(opts.keys).forEach(
-        ([key, val]) => !val && console.error(`Missing value for '${key}'`)
-      );
+      Object.entries(opts.keys).forEach(([key, val]) => {
+        if (!val) {
+          throw new Error(`Missing value for '${key}'`);
+        }
+      });
 
       const { clientId, clientToken, serverToken, macKey, encKey } = opts.keys;
 
@@ -132,7 +134,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       this.macKey = macKey;
       this.encKey = encKey;
     } else if (opts.restoreSession) {
-      console.error("Keys are needed for restoring a session");
+      throw new Error("Keys are needed for restoring a session");
     }
 
     this.apiSocket.onmessage = this.onSocketMessage.bind(this);
@@ -143,12 +145,13 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     });
   }
 
-  protected async init(opts: {
+  protected async init({
+    restoreSession,
+    clientInfo,
+  }: {
     restoreSession: boolean;
     clientInfo: WAClientInfo;
   }) {
-    const { restoreSession, clientInfo } = opts;
-
     const loginMsgId = "" + Date.now();
 
     if (!restoreSession || (restoreSession && !this.clientId)) {

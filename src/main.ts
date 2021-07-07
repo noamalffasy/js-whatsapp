@@ -36,7 +36,11 @@ interface WAListeners {
 export default class WhatsApp extends TypedEmitter<WAListeners> {
   myWid?: string;
 
-  apiClient: WABaseClient;
+  _apiClient?: WABaseClient;
+
+  get apiClient() {
+    return this._apiClient!;
+  }
 
   chatList: WAChat[] = [];
   contactList: WAContact[] = [];
@@ -60,8 +64,6 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
       },
     };
 
-    this.apiClient = new WABaseClient();
-
     this.init({ ...defaultOpts, ...opts });
   }
 
@@ -73,7 +75,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
       restoreSession: boolean;
     }
   ) {
-    this.apiClient = new WABaseClient({
+    this._apiClient = new WABaseClient({
       ...opts,
       keys: opts.keysPath
         ? (JSON.parse(await readFile(opts.keysPath)) as WAKeys)
