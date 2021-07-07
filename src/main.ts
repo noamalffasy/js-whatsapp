@@ -45,7 +45,7 @@ export default class WhatsApp extends TypedEmitter<WAListeners> {
     opts: Partial<ConstructorParameters<typeof WABaseClient>[0]> & {
       qrPath?: string;
       keysPath?: string;
-    }
+    } = {}
   ) {
     super();
 
