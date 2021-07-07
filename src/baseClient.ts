@@ -154,7 +154,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
         JSON.stringify([
           "admin",
           "init",
-          [2, 2123, 7],
+          [2, 2123, 8],
           [clientInfo.browser, clientInfo.os, clientInfo.osVersion],
           this.clientId,
           true,
