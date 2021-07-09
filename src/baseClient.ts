@@ -8,7 +8,7 @@ import crypto from "crypto";
 import { generateKeyPair, sharedKey } from "curve25519-js";
 import { TypedEmitter } from "tiny-typed-emitter";
 
-import {
+import type {
   WAWebMessage,
   WAStubMessage,
   WhatsAppLoginPayload,
@@ -26,8 +26,9 @@ import {
   WADecryptedMedia,
   WAMediaTypes,
   WhatsAppChallengePayload,
+  WhatsAppLoginConnPayload,
+  WhatsAppRestoreConnPayload,
 } from "./types";
-import { doesFileExist } from "./utils/path";
 import {
   HmacSha256,
   AESDecrypt,
@@ -206,11 +207,13 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     setTimeout(this.keepAlive.bind(this), 20 * 1000);
 
     // Login
-    if (data[1].secret) {
-      this.setupEncryptionKeys(data as WhatsAppConnPayload);
+    if ("secret" in data[1]) {
+      this.setupEncryptionKeys(data as WhatsAppLoginConnPayload);
       // Restore session
     } else if (data[1].clientToken) {
-      const { clientToken, serverToken } = (data as WhatsAppConnPayload)[1];
+      const { clientToken, serverToken } = (
+        data as WhatsAppRestoreConnPayload
+      )[1];
 
       this.clientToken = clientToken;
       this.serverToken = serverToken;
@@ -225,7 +228,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     });
   }
 
-  protected setupEncryptionKeys(data: WhatsAppConnPayload) {
+  protected setupEncryptionKeys(data: WhatsAppLoginConnPayload) {
     const decodedSecret = Uint8Array.from(
       Buffer.from(data[1].secret, "base64")
     );

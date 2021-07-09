@@ -7,9 +7,17 @@ export interface WhatsAppLoginPayload {
   time: number;
 }
 
-export interface WhatsAppConnPayload {
-  0: "Conn";
-  1: {
+export type WhatsAppConnPayload =
+  | WhatsAppLoginConnPayload
+  | WhatsAppRestoreConnPayload;
+
+export type WhatsAppLoginConnPayload = WhatsAppRestoreConnPayload & {
+  1: { secret: string };
+};
+
+export type WhatsAppRestoreConnPayload = [
+  "Conn",
+  {
     ref: string;
     wid: string;
     connected: boolean;
@@ -40,8 +48,8 @@ export interface WhatsAppConnPayload {
     };
     pushname: string;
     tos: 0 | 1;
-  };
-}
+  }
+];
 
 export interface WhatsAppStreamPayload {
   0: "Stream";
@@ -59,13 +67,13 @@ export interface WhatsAppPropsPayload {
   };
 }
 
-export interface WhatsAppChallengePayload {
-  0: "Cmd";
-  1: {
+export type WhatsAppChallengePayload = [
+  "Cmd",
+  {
     type: "challenge";
     challenge: string;
-  };
-}
+  }
+];
 
 export interface WhatsAppUploadMediaURL {
   status: number;
