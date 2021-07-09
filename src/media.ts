@@ -28,7 +28,7 @@ export async function sendMediaMessage(
     msgType: mediaObj.msgType,
     msgId: nextId,
     mentionedJids:
-      "caption" in mediaObj ? mediaObj.caption.mentionedJids : undefined,
+      "caption" in mediaObj ? mediaObj.caption!.mentionedJids : undefined,
   });
 
   return { id: nextId, content: media.content };
@@ -56,6 +56,6 @@ export async function sendQuotedMediaMessage(
     media,
     remoteJid,
     quotedInfo,
-    "caption" in mediaObj ? mediaObj.caption.mentionedJids : undefined
+    "caption" in mediaObj ? mediaObj.caption!.mentionedJids : undefined
   );
 }
