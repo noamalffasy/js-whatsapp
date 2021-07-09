@@ -10,9 +10,25 @@ export interface WhatsAppLoginPayload {
 export interface WhatsAppConnPayload {
   0: "Conn";
   1: {
-    battery: number;
+    ref: string;
+    wid: string;
+    connected: boolean;
+    isResponse: `${boolean}`;
+    serverToken: string;
     browserToken: string;
     clientToken: string;
+    lc: string;
+    lg: string;
+    locales: `${string}-${string}`;
+    protoVersion: [number, number];
+    binVersion: number;
+    battery: number;
+    plugged: boolean;
+    platform: string;
+    features: {
+      URL: boolean;
+      FLAGS: string;
+    };
     phone: {
       wa_version: string;
       mcc: string;
@@ -22,11 +38,8 @@ export interface WhatsAppConnPayload {
       device_model: string;
       os_build_number: string;
     };
-    platform: string;
     pushname: string;
-    secret: string;
-    serverToken: string;
-    wid: string;
+    tos: 0 | 1;
   };
 }
 
