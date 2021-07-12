@@ -76,6 +76,7 @@ interface WAListeners {
 
 export default class WABaseClient extends TypedEmitter<WAListeners> {
   protected apiSocket: WebSocket;
+  protected clientInfo: WAClientInfo;
 
   protected clientId?: string;
 
@@ -109,6 +110,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     this.apiSocket = new WebSocket("wss://web.whatsapp.com/ws", {
       headers: { Origin: "https://web.whatsapp.com" },
     });
+    this.clientInfo = opts.clientInfo;
 
     if (opts.keys && opts.restoreSession) {
       Object.entries(opts.keys).forEach(([key, val]) => {
@@ -128,27 +130,23 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       throw new Error("Keys are needed for restoring a session");
     }
 
-    this.apiSocket.onmessage = this.onSocketMessage.bind(this);
-
     this.init({
       restoreSession: opts.restoreSession,
-      clientInfo: opts.clientInfo,
     });
   }
 
-  protected async init({
-    restoreSession,
-    clientInfo,
-  }: {
-    restoreSession: boolean;
-    clientInfo: WAClientInfo;
-  }) {
+  protected async init({ restoreSession }: { restoreSession: boolean }) {
     const loginMsgId = `${Math.round(Date.now() / 1000)}.--0`;
+
+    this.apiSocket = new WebSocket("wss://web.whatsapp.com/ws", {
+      headers: { Origin: "https://web.whatsapp.com" },
+    });
 
     if (!restoreSession || (restoreSession && !this.clientId)) {
       this.clientId = crypto.randomBytes(16).toString("base64");
     }
 
+    this.apiSocket.onmessage = this.onSocketMessage.bind(this);
     this.apiSocket.on("open", async () => {
       const data: WhatsAppLoginPayload = await this.sendSocketAsync(
         loginMsgId,
@@ -156,7 +154,11 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           "admin",
           "init",
           [2, 2123, 8],
-          [clientInfo.browser, clientInfo.os, clientInfo.osVersion],
+          [
+            this.clientInfo.browser,
+            this.clientInfo.os,
+            this.clientInfo.osVersion,
+          ],
           this.clientId,
           true,
         ])
@@ -327,8 +329,20 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
 
   protected keepAlive() {
     if (this.apiSocket) {
+      const timeout = setTimeout(() => {
+        delete this.messageListeners["keepAlive"];
+        this.apiSocket.terminate();
+        this.init({ restoreSession: true });
+      }, 20 * 1000 + 5000);
+
       this.apiSocket.send("?,,");
-      setTimeout(this.keepAlive.bind(this), 20 * 1000);
+      this.addMessageListener((e) => {
+        if (typeof e.data === "string" && e.data.startsWith("!")) {
+          clearTimeout(timeout);
+          delete this.messageListeners["keepAlive"];
+          setTimeout(this.keepAlive.bind(this), 20 * 1000);
+        }
+      }, "keepAlive");
     }
   }
 
