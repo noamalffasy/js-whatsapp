@@ -541,11 +541,13 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
             text: string;
             mentionedJids?: WAContextInfo["mentionedJid"];
           };
+          thumbnail?: Buffer;
         }
       | {
           msgType: "sticker";
           mimetype: string;
           file: Buffer;
+          thumbnail?: Buffer;
         }
       | {
           msgType: "video";
@@ -557,6 +559,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
           };
           duration: number;
           isGif: boolean;
+          thumbnail?: Buffer;
         }
       | {
           msgType: "audio";
@@ -601,15 +604,13 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
     };
 
     if (_mediaObj.msgType === "sticker") {
-      mediaObj.pngThumbnail = await sharp(_mediaObj.file)
-        .resize(100)
-        .png()
-        .toBuffer();
+      mediaObj.pngThumbnail =
+        _mediaObj.thumbnail ??
+        (await sharp(_mediaObj.file).resize(100).png().toBuffer());
     } else if (_mediaObj.msgType === "image") {
-      mediaObj.jpegThumbnail = await sharp(_mediaObj.file)
-        .resize(100)
-        .jpeg()
-        .toBuffer();
+      mediaObj.jpegThumbnail =
+        _mediaObj.thumbnail ??
+        (await sharp(_mediaObj.file).resize(100).jpeg().toBuffer());
     } else if (_mediaObj.msgType === "audio") {
       if (_mediaObj.duration) {
         mediaObj.seconds = _mediaObj.duration;
@@ -618,6 +619,7 @@ export default class WABaseClient extends TypedEmitter<WAListeners> {
       }
     } else if (_mediaObj.msgType === "video") {
       mediaObj.gifPlayback = _mediaObj.isGif;
+      mediaObj.jpegThumbnail = _mediaObj.thumbnail;
     }
 
     const media = await this.uploadMedia(
